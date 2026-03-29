@@ -474,10 +474,22 @@ def _save_lead(data):
 
 # --- Zone Classification ---
 
+def resolve_short_url(short_url):
+    """Resolve a shortened URL (maps.app.goo.gl, etc.) to the full URL."""
+    try:
+        resp = requests.head(short_url, allow_redirects=True, timeout=10)
+        return resp.url
+    except Exception:
+        return short_url
+
+
 def extract_coords_from_maps_url(maps_url):
-    """Try to extract lat/lng from a Google Maps URL."""
+    """Try to extract lat/lng from a Google Maps URL. Resolves short URLs."""
     if not maps_url:
         return None, None
+    # Resolve short URLs first
+    if "goo.gl" in maps_url or "bit.ly" in maps_url:
+        maps_url = resolve_short_url(maps_url)
     # Pattern: /@lat,lng or /place/.../@lat,lng
     match = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', maps_url)
     if match:
@@ -554,6 +566,29 @@ def fetch_followers_for_lead(lead_id):
         db.execute("UPDATE leads SET followers = ? WHERE id = ?", (count, lead_id))
         db.commit()
     return jsonify({"followers": count, "display": format_followers(count)})
+
+
+@app.route("/api/fetch-all-followers", methods=["POST"])
+def fetch_all_followers():
+    """Fetch follower counts for all leads that don't have one yet."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, platform, profile_url FROM leads "
+        "WHERE (followers IS NULL OR followers = 0) AND platform = 'tiktok'"
+    ).fetchall()
+
+    fetched = 0
+    failed = 0
+    for row in rows:
+        count = fetch_followers(row["platform"], row["profile_url"])
+        if count is not None:
+            db.execute("UPDATE leads SET followers = ? WHERE id = ?", (count, row["id"]))
+            fetched += 1
+        else:
+            failed += 1
+        time.sleep(1)  # Rate limit
+    db.commit()
+    return jsonify({"fetched": fetched, "failed": failed, "total": len(rows)})
 
 
 # --- Route Optimizer ---

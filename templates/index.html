@@ -180,9 +180,10 @@ https://facebook.com/business3
                 <button class="filter-btn" data-status="client">Client</button>
                 <button class="filter-btn" data-status="skip">Skip</button>
             </div>
-            <div style="margin-bottom:16px;">
+            <div style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
                 <button class="btn btn-sm btn-ghost" onclick="classifyZones()" id="classify-btn">Classify Zones</button>
-                <span class="helper" style="margin-left:8px;">Extracts coords from Maps URLs + assigns Central / P&eacute;rez Zeled&oacute;n / Unclassified (~1 sec per lead)</span>
+                <button class="btn btn-sm btn-ghost" onclick="fetchAllFollowers()" id="followers-btn">Fetch Followers (TikTok)</button>
+                <span class="helper">~1 sec per lead each</span>
             </div>
             <div id="leads-list"></div>
         </div>
@@ -552,6 +553,22 @@ async function classifyZones() {
         btn.textContent = `Done! ${data.coords_filled} coords extracted, ${data.classified} zones classified`;
         loadLeads();
         setTimeout(() => { btn.textContent = 'Classify Zones'; btn.disabled = false; }, 3000);
+    } catch (err) {
+        btn.textContent = 'Error';
+        btn.disabled = false;
+    }
+}
+
+async function fetchAllFollowers() {
+    const btn = document.getElementById('followers-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Fetching...';
+    try {
+        const resp = await fetch('/api/fetch-all-followers', {method: 'POST'});
+        const data = await resp.json();
+        btn.textContent = `Done! ${data.fetched} fetched, ${data.failed} failed`;
+        loadLeads();
+        setTimeout(() => { btn.textContent = 'Fetch Followers (TikTok)'; btn.disabled = false; }, 3000);
     } catch (err) {
         btn.textContent = 'Error';
         btn.disabled = false;
