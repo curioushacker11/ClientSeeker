@@ -211,17 +211,31 @@ https://facebook.com/business3
     </div>
 
 <script>
-// --- Tabs ---
+// --- Tabs (persist active tab across reloads) ---
+function switchTab(tabName) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
+    document.getElementById('tab-' + tabName).classList.add('active');
+    localStorage.setItem('activeTab', tabName);
+    if (tabName === 'leads') loadLeads();
+    if (tabName === 'route') loadZones();
+}
+
 document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-        if (tab.dataset.tab === 'leads') loadLeads();
-        if (tab.dataset.tab === 'route') loadZones();
-    });
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
 });
+
+// Restore last active tab on load
+const savedTab = localStorage.getItem('activeTab');
+if (savedTab && document.querySelector(`.tab[data-tab="${savedTab}"]`)) {
+    switchTab(savedTab);
+}
+
+// Persist bulk input text
+const bulkInput = document.getElementById('bulk-input');
+bulkInput.value = localStorage.getItem('bulkInput') || '';
+bulkInput.addEventListener('input', () => localStorage.setItem('bulkInput', bulkInput.value));
 
 document.getElementById('url-input').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 document.getElementById('custom-query').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
