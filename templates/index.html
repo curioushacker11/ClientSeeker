@@ -78,6 +78,9 @@
         .filter-btn.active { background: #38bdf8; color: #0f172a; border-color: #38bdf8; }
 
         .lead-card { background: #1e293b; border-radius: 10px; padding: 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+        .lead-card.reviewed { opacity: 0.6; }
+
+        .lead-checkbox { width: 20px; height: 20px; accent-color: #22c55e; cursor: pointer; flex-shrink: 0; }
         .lead-info { flex: 1; }
         .lead-name { font-weight: 600; color: #f8fafc; }
         .lead-meta { font-size: 0.85rem; color: #94a3b8; margin-top: 4px; }
@@ -446,7 +449,8 @@ function renderLeads(leads) {
         return;
     }
     container.innerHTML = leads.map(lead => `
-        <div class="lead-card" id="lead-${lead.id}">
+        <div class="lead-card${lead.reviewed ? ' reviewed' : ''}" id="lead-${lead.id}">
+            <input type="checkbox" class="lead-checkbox" ${lead.reviewed ? 'checked' : ''} onchange="toggleReviewed(${lead.id}, this.checked)" title="Mark as reviewed">
             <div class="lead-info">
                 <div class="lead-name">
                     <span id="name-display-${lead.id}">${esc(lead.business_name || lead.handle)}</span>
@@ -490,6 +494,11 @@ async function changeStatus(id, status) {
     if (status === 'to_message') {
         await updateLead(id, 'maps_url', '');
     }
+    loadLeads();
+}
+
+async function toggleReviewed(id, checked) {
+    await updateLead(id, 'reviewed', checked ? 1 : 0);
     loadLeads();
 }
 

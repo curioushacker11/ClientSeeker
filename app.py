@@ -51,9 +51,15 @@ def init_db():
             lng REAL,
             status TEXT DEFAULT 'new',
             notes TEXT DEFAULT '',
+            reviewed INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
+    # Add reviewed column if missing (existing databases)
+    try:
+        db.execute("ALTER TABLE leads ADD COLUMN reviewed INTEGER DEFAULT 0")
+    except Exception:
+        pass
     db.commit()
 
 
@@ -244,7 +250,7 @@ def update_lead(lead_id):
     db = get_db()
     fields = []
     values = []
-    for key in ("status", "notes", "business_name", "maps_url", "address", "lat", "lng"):
+    for key in ("status", "notes", "business_name", "maps_url", "address", "lat", "lng", "reviewed"):
         if key in data:
             fields.append(f"{key} = ?")
             values.append(data[key])
