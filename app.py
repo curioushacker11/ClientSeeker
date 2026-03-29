@@ -12,6 +12,7 @@ load_dotenv()
 app = Flask(__name__)
 DATABASE = os.path.join(app.instance_path, "leads.db")
 SCRAPER_URL = os.environ.get("SCRAPER_URL", "http://localhost:8001")
+DEFAULT_REGION = "Costa Rica"
 
 
 # --- Database ---
@@ -104,23 +105,23 @@ def handle_to_search_name(handle):
 
 # --- Google Maps Scraper ---
 
-def search_maps(query):
+def search_maps(query, max_results=1):
     """Search Google Maps via the local scraper service."""
     try:
         resp = requests.get(
             f"{SCRAPER_URL}/scrape-get",
-            params={"query": query, "max_places": 1, "lang": "en", "headless": True, "concurrency": 1},
+            params={"query": query, "max_places": max_results, "lang": "es", "headless": True, "concurrency": 1},
             timeout=60,
         )
         resp.raise_for_status()
         results = resp.json()
         if not results:
-            return None, "No results found"
-        return results[0], None
+            return [], "No results found"
+        return results, None
     except requests.ConnectionError:
-        return None, "Scraper not running. Start it with: docker-compose -f scraper/docker-compose.yml up"
+        return [], "Scraper not running. Start it with: docker-compose -f scraper/docker-compose.yml up"
     except requests.RequestException as e:
-        return None, str(e)
+        return [], str(e)
 
 
 # --- Routes ---
@@ -137,6 +138,20 @@ def index():
     return render_template("index.html", scraper_ok=scraper_ok)
 
 
+def _place_to_dict(place):
+    coords = place.get("coordinates", {})
+    return {
+        "business_name": place.get("name", ""),
+        "address": place.get("address", ""),
+        "phone": place.get("phone", ""),
+        "website": place.get("website", ""),
+        "rating": place.get("rating"),
+        "maps_url": place.get("link", ""),
+        "lat": coords.get("latitude"),
+        "lng": coords.get("longitude"),
+    }
+
+
 @app.route("/api/search", methods=["POST"])
 def search():
     data = request.json or {}
@@ -151,7 +166,8 @@ def search():
         return jsonify({"error": "Could not extract handle from URL. Supported: TikTok, Instagram, Facebook"}), 400
 
     search_name = custom_query if custom_query else handle_to_search_name(handle)
-    place, err = search_maps(search_name)
+    query_with_region = f"{search_name} {DEFAULT_REGION}"
+    places, err = search_maps(query_with_region, max_results=3)
 
     result = {
         "platform": platform,
@@ -160,18 +176,9 @@ def search():
         "search_query": search_name,
     }
 
-    if place:
+    if places:
         result["found"] = True
-        result["business_name"] = place.get("name", "")
-        result["address"] = place.get("address", "")
-        result["phone"] = place.get("phone", "")
-        result["website"] = place.get("website", "")
-        result["rating"] = place.get("rating")
-        result["maps_url"] = place.get("link", "")
-        coords = place.get("coordinates", {})
-        result["lat"] = coords.get("latitude")
-        result["lng"] = coords.get("longitude")
-        result["action"] = "visit"
+        result["candidates"] = [_place_to_dict(p) for p in places]
     else:
         result["found"] = False
         result["error"] = err
@@ -262,7 +269,8 @@ def bulk_search():
         return jsonify({"skipped": True, "url": url, "reason": "Could not extract handle"}), 200
 
     search_name = handle_to_search_name(handle)
-    place, err = search_maps(search_name)
+    query_with_region = f"{search_name} {DEFAULT_REGION}"
+    places, err = search_maps(query_with_region, max_results=1)
 
     result = {
         "platform": platform,
@@ -271,17 +279,10 @@ def bulk_search():
         "search_query": search_name,
     }
 
-    if place:
+    if places:
+        place = places[0]
+        result.update(_place_to_dict(place))
         result["found"] = True
-        result["business_name"] = place.get("name", "")
-        result["address"] = place.get("address", "")
-        result["phone"] = place.get("phone", "")
-        result["website"] = place.get("website", "")
-        result["rating"] = place.get("rating")
-        result["maps_url"] = place.get("link", "")
-        coords = place.get("coordinates", {})
-        result["lat"] = coords.get("latitude")
-        result["lng"] = coords.get("longitude")
         result["action"] = "visit"
         if auto_save:
             result["status"] = "to_visit"

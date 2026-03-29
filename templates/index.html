@@ -259,27 +259,45 @@ async function doSearch() {
 
 function renderResult(data) {
     const container = document.getElementById('results');
-    if (data.found) {
-        container.innerHTML = `
+    if (data.found && data.candidates && data.candidates.length) {
+        const label = data.candidates.length > 1
+            ? `<p style="color:#94a3b8; margin-bottom:12px; font-size:0.9rem;">Found ${data.candidates.length} results for @${esc(data.handle)} — pick the correct one:</p>`
+            : '';
+
+        container.innerHTML = label + data.candidates.map((c, i) => {
+            const saveData = Object.assign({}, c, {platform: data.platform, handle: data.handle, profile_url: data.profile_url});
+            const jsonStr = JSON.stringify(saveData).replace(/'/g, "&#39;").replace(/</g, "\\x3c");
+            return `
             <div class="result-card visit">
                 <div class="result-header">
                     <div>
-                        <strong style="font-size:1.1rem">${esc(data.business_name)}</strong>
+                        <strong style="font-size:1.1rem">${esc(c.business_name)}</strong>
                         <span style="color:#94a3b8; margin-left:8px;">@${esc(data.handle)} on ${esc(data.platform)}</span>
                     </div>
-                    <span class="badge badge-visit">Visit</span>
+                    <span class="badge badge-visit">${data.candidates.length > 1 ? 'Option ' + (i+1) : 'Visit'}</span>
                 </div>
                 <div class="result-grid">
-                    <div class="result-field"><div class="label">Address</div><div class="value">${esc(data.address)}</div></div>
-                    <div class="result-field"><div class="label">Phone</div><div class="value">${data.phone ? esc(data.phone) : '\u2014'}</div></div>
-                    <div class="result-field"><div class="label">Website</div><div class="value">${data.website ? `<a href="${esc(data.website)}" target="_blank">${esc(data.website)}</a>` : '\u2014'}</div></div>
-                    <div class="result-field"><div class="label">Rating</div><div class="value">${data.rating ? data.rating + ' / 5' : '\u2014'}</div></div>
-                    <div class="result-field"><div class="label">Google Maps</div><div class="value"><a href="${esc(data.maps_url)}" target="_blank">Open in Maps</a></div></div>
+                    <div class="result-field"><div class="label">Address</div><div class="value">${esc(c.address)}</div></div>
+                    <div class="result-field"><div class="label">Phone</div><div class="value">${c.phone ? esc(c.phone) : '\u2014'}</div></div>
+                    <div class="result-field"><div class="label">Website</div><div class="value">${c.website ? `<a href="${esc(c.website)}" target="_blank">${esc(c.website)}</a>` : '\u2014'}</div></div>
+                    <div class="result-field"><div class="label">Rating</div><div class="value">${c.rating ? c.rating + ' / 5' : '\u2014'}</div></div>
+                    <div class="result-field"><div class="label">Google Maps</div><div class="value"><a href="${esc(c.maps_url)}" target="_blank">Open in Maps</a></div></div>
                     <div class="result-field"><div class="label">Profile</div><div class="value"><a href="${esc(data.profile_url)}" target="_blank">${esc(data.profile_url)}</a></div></div>
                 </div>
                 <div class="result-actions">
-                    <button class="btn btn-save" onclick='saveLead(event, ${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_visit")'>Save as "To Visit"</button>
-                    <button class="btn btn-sm btn-ghost" onclick='saveLead(event, ${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_message")'>Save as "To Message"</button>
+                    <button class="btn btn-save" onclick='saveLead(event, ${jsonStr}, "to_visit")'>Save as "To Visit"</button>
+                    <button class="btn btn-sm btn-ghost" onclick='saveLead(event, ${jsonStr}, "to_message")'>Save as "To Message"</button>
+                </div>
+            </div>`;
+        }).join('');
+
+        // Add "none of these" option
+        const noneData = JSON.stringify({platform: data.platform, handle: data.handle, profile_url: data.profile_url}).replace(/'/g, "&#39;");
+        container.innerHTML += `
+            <div class="result-card message" style="padding:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#94a3b8;">None of these are correct?</span>
+                    <button class="btn btn-sm btn-ghost" onclick='saveLead(event, ${noneData}, "to_message")'>Save as "To Message" instead</button>
                 </div>
             </div>`;
     } else {
@@ -295,7 +313,7 @@ function renderResult(data) {
                 <p style="color:#94a3b8; margin-bottom: 12px;">No Google Maps result for @${esc(data.handle)} on ${esc(data.platform)}. Try a custom search name, or reach out on social media.</p>
                 <div class="result-field" style="margin-bottom:12px"><div class="label">Profile</div><div class="value"><a href="${esc(data.profile_url)}" target="_blank">${esc(data.profile_url)}</a></div></div>
                 <div class="result-actions">
-                    <button class="btn btn-save" onclick='saveLead(event, ${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_message")'>Save as "To Message"</button>
+                    <button class="btn btn-save" onclick='saveLead(event, ${JSON.stringify({platform: data.platform, handle: data.handle, profile_url: data.profile_url}).replace(/'/g, "&#39;")}, "to_message")'>Save as "To Message"</button>
                 </div>
             </div>`;
     }
