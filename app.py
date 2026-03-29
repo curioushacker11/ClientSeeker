@@ -232,7 +232,7 @@ def update_lead(lead_id):
     db = get_db()
     fields = []
     values = []
-    for key in ("status", "notes"):
+    for key in ("status", "notes", "business_name", "maps_url", "address", "lat", "lng"):
         if key in data:
             fields.append(f"{key} = ?")
             values.append(data[key])

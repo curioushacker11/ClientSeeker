@@ -448,18 +448,24 @@ function renderLeads(leads) {
     container.innerHTML = leads.map(lead => `
         <div class="lead-card" id="lead-${lead.id}">
             <div class="lead-info">
-                <div class="lead-name">${esc(lead.business_name || lead.handle)}</div>
+                <div class="lead-name">
+                    <span id="name-display-${lead.id}">${esc(lead.business_name || lead.handle)}</span>
+                    <button class="btn btn-sm btn-ghost" style="padding:2px 6px; margin-left:6px; font-size:0.7rem;" onclick="editName(${lead.id}, '${esc(lead.business_name || lead.handle).replace(/'/g, "\\'")}')">edit</button>
+                </div>
                 <div class="lead-meta">
                     @${esc(lead.handle)} on ${esc(lead.platform)}
                     ${lead.address ? ` &middot; ${esc(lead.address)}` : ''}
-                    ${lead.maps_url ? ` &middot; <a href="${esc(lead.maps_url)}" target="_blank">Maps</a>` : ''}
+                    ${lead.maps_url
+                        ? ` &middot; <a href="${esc(lead.maps_url)}" target="_blank">Maps</a> <button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="editMapsUrl(${lead.id})">edit</button>`
+                        : ` &middot; <button class="btn btn-sm btn-save" style="padding:2px 8px;font-size:0.7rem;" onclick="editMapsUrl(${lead.id})">+ Add Maps link</button>`
+                    }
                     &middot; <a href="${esc(lead.profile_url)}" target="_blank">Profile</a>
                     ${lead.phone ? ` &middot; ${esc(lead.phone)}` : ''}
                 </div>
                 ${lead.notes ? `<div class="lead-meta" style="margin-top:4px;color:#64748b">Note: ${esc(lead.notes)}</div>` : ''}
             </div>
             <div class="lead-actions">
-                <select class="status-select" onchange="updateLead(${lead.id}, 'status', this.value)">
+                <select class="status-select" onchange="updateLead(${lead.id}, 'status', this.value).then(()=>loadLeads())">
                     ${['new','to_visit','to_message','contacted','client','skip'].map(s =>
                         `<option value="${s}" ${lead.status===s?'selected':''}>${s.replace('_',' ')}</option>`
                     ).join('')}
@@ -477,6 +483,20 @@ async function updateLead(id, field, value) {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({[field]: value})
     });
+}
+
+async function editName(id, current) {
+    const name = prompt('Edit business name:', current);
+    if (name === null || name === current) return;
+    await updateLead(id, 'business_name', name);
+    loadLeads();
+}
+
+async function editMapsUrl(id) {
+    const url = prompt('Paste Google Maps link:');
+    if (url === null) return;
+    await updateLead(id, 'maps_url', url);
+    loadLeads();
 }
 
 async function addNote(id) {
