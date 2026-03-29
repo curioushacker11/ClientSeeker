@@ -1,0 +1,29 @@
+services:
+  scraper:
+    build: ./scraper
+    container_name: clientseeker-scraper
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    working_dir: /app
+    tmpfs:
+      - /tmp:size=512M
+      - /dev/shm:size=2G
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 3G
+
+  app:
+    build: .
+    container_name: clientseeker-app
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+    depends_on:
+      - scraper
+    environment:
+      - SCRAPER_URL=http://scraper:8001
+    volumes:
+      - ./instance:/app/instance
