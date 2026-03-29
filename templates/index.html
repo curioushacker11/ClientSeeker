@@ -483,7 +483,11 @@ async function updateLead(id, field, value) {
 async function changeStatus(id, status) {
     await updateLead(id, 'status', status);
     if (status === 'to_message') {
-        await updateLead(id, 'maps_url', '');
+        await fetch(`/api/leads/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({maps_url: '', lat: null, lng: null, zone: ''})
+        });
     }
     loadLeads();
 }
@@ -494,7 +498,11 @@ async function toggleReviewed(id, checked) {
 }
 
 async function removeMapsUrl(id) {
-    await updateLead(id, 'maps_url', '');
+    await fetch(`/api/leads/${id}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({maps_url: '', lat: null, lng: null, zone: ''})
+    });
     loadLeads();
 }
 

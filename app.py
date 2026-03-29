@@ -245,19 +245,13 @@ def search_maps(query, max_results=1):
 
 def _place_to_dict(place):
     coords = place.get("coordinates", {})
-    lat = coords.get("latitude")
-    lng = coords.get("longitude")
-    maps_url = place.get("link", "")
-    # Generate Maps URL from coords if scraper didn't provide one
-    if not maps_url and lat and lng:
-        maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}"
     return {
         "business_name": _clean(place.get("name", "")),
         "address": _clean(place.get("address", "")),
         "phone": _clean(place.get("phone", "")),
         "website": place.get("website", ""),
         "rating": place.get("rating"),
-        "maps_url": maps_url,
+        "maps_url": place.get("link", ""),
         "lat": coords.get("latitude"),
         "lng": coords.get("longitude"),
     }
