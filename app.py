@@ -245,5 +245,172 @@ def delete_lead(lead_id):
     return jsonify({"deleted": True})
 
 
+# --- Bulk Search ---
+
+@app.route("/api/bulk-search", methods=["POST"])
+def bulk_search():
+    """Process a single URL from the bulk queue. Called repeatedly by the frontend."""
+    data = request.json or {}
+    url = data.get("url", "").strip()
+    auto_save = data.get("auto_save", True)
+
+    if not url:
+        return jsonify({"error": "No URL provided"}), 400
+
+    platform, handle, full_url = parse_social_url(url)
+    if not handle:
+        return jsonify({"skipped": True, "url": url, "reason": "Could not extract handle"}), 200
+
+    search_name = handle_to_search_name(handle)
+    place, err = search_maps(search_name)
+
+    result = {
+        "platform": platform,
+        "handle": handle,
+        "profile_url": full_url,
+        "search_query": search_name,
+    }
+
+    if place:
+        result["found"] = True
+        result["business_name"] = place.get("name", "")
+        result["address"] = place.get("address", "")
+        result["phone"] = place.get("phone", "")
+        result["website"] = place.get("website", "")
+        result["rating"] = place.get("rating")
+        result["maps_url"] = place.get("link", "")
+        coords = place.get("coordinates", {})
+        result["lat"] = coords.get("latitude")
+        result["lng"] = coords.get("longitude")
+        result["action"] = "visit"
+        if auto_save:
+            result["status"] = "to_visit"
+            _save_lead(result)
+    else:
+        result["found"] = False
+        result["error"] = err
+        result["action"] = "message"
+        if auto_save:
+            result["status"] = "to_message"
+            _save_lead(result)
+
+    return jsonify(result)
+
+
+def _save_lead(data):
+    db = get_db()
+    db.execute(
+        """INSERT INTO leads
+           (platform, handle, profile_url, business_name, address, phone, website, rating, maps_url, lat, lng, status, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            data.get("platform", ""),
+            data.get("handle", ""),
+            data.get("profile_url", ""),
+            data.get("business_name", ""),
+            data.get("address", ""),
+            data.get("phone", ""),
+            data.get("website", ""),
+            data.get("rating"),
+            data.get("maps_url", ""),
+            data.get("lat"),
+            data.get("lng"),
+            data.get("status", "new"),
+            data.get("notes", ""),
+        ),
+    )
+    db.commit()
+
+
+# --- Route Optimizer ---
+
+@app.route("/api/optimize-route", methods=["POST"])
+def optimize_route():
+    """Use OSRM to find optimal visit order for leads with coordinates."""
+    data = request.json or {}
+    lead_ids = data.get("lead_ids", [])
+    start_lat = data.get("start_lat")
+    start_lng = data.get("start_lng")
+
+    db = get_db()
+    if lead_ids:
+        placeholders = ",".join("?" for _ in lead_ids)
+        rows = db.execute(
+            f"SELECT * FROM leads WHERE id IN ({placeholders}) AND lat IS NOT NULL AND lng IS NOT NULL",
+            lead_ids,
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT * FROM leads WHERE status = 'to_visit' AND lat IS NOT NULL AND lng IS NOT NULL"
+        ).fetchall()
+
+    leads = [dict(r) for r in rows]
+    if not leads:
+        return jsonify({"error": "No leads with coordinates found"}), 400
+
+    # Build coordinates list: start point first (if provided), then all leads
+    coords = []
+    if start_lat and start_lng:
+        coords.append({"lng": float(start_lng), "lat": float(start_lat), "is_start": True})
+    for lead in leads:
+        coords.append({"lng": lead["lng"], "lat": lead["lat"], "lead": lead})
+
+    if len(coords) < 2:
+        return jsonify({"error": "Need at least 2 points for a route"}), 400
+
+    # Call OSRM trip endpoint (solves Traveling Salesman Problem)
+    coord_str = ";".join(f"{c['lng']},{c['lat']}" for c in coords)
+    source_param = "first" if start_lat else "any"
+
+    try:
+        resp = requests.get(
+            f"https://router.project-osrm.org/trip/v1/driving/{coord_str}",
+            params={"source": source_param, "roundtrip": "false", "geometries": "geojson", "overview": "full"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        osrm = resp.json()
+    except requests.RequestException as e:
+        return jsonify({"error": f"OSRM request failed: {e}"}), 500
+
+    if osrm.get("code") != "Ok":
+        return jsonify({"error": f"OSRM error: {osrm.get('message', 'unknown')}"}), 500
+
+    trip = osrm["trips"][0]
+    waypoint_order = [w["waypoint_index"] for w in osrm["waypoints"]]
+
+    # Build ordered list of leads based on OSRM's optimal order
+    ordered_leads = []
+    for idx in waypoint_order:
+        c = coords[idx]
+        if "lead" in c:
+            ordered_leads.append(c["lead"])
+
+    # Build Google Maps directions URL with optimized order
+    gmaps_waypoints = []
+    for lead in ordered_leads:
+        gmaps_waypoints.append(f"{lead['lat']},{lead['lng']}")
+
+    if start_lat:
+        origin = f"{start_lat},{start_lng}"
+    else:
+        origin = gmaps_waypoints.pop(0)
+
+    destination = gmaps_waypoints[-1] if gmaps_waypoints else origin
+    mid_waypoints = gmaps_waypoints[:-1] if len(gmaps_waypoints) > 1 else []
+
+    gmaps_url = f"https://www.google.com/maps/dir/{origin}"
+    for wp in gmaps_waypoints:
+        gmaps_url += f"/{wp}"
+
+    return jsonify({
+        "ordered_leads": ordered_leads,
+        "total_distance_km": round(trip["distance"] / 1000, 1),
+        "total_duration_min": round(trip["duration"] / 60),
+        "route_geometry": trip["geometry"],
+        "google_maps_url": gmaps_url,
+    })
+
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)

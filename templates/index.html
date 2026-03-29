@@ -26,9 +26,9 @@
         .search-box { background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
         .input-group { margin-bottom: 14px; }
         .input-group label { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 6px; }
-        .input-group input { width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #f8fafc; font-size: 1rem; outline: none; transition: border-color 0.2s; }
-        .input-group input:focus { border-color: #38bdf8; }
-        .input-group input::placeholder { color: #475569; }
+        .input-group input, .input-group textarea { width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #f8fafc; font-size: 1rem; outline: none; transition: border-color 0.2s; font-family: inherit; }
+        .input-group input:focus, .input-group textarea:focus { border-color: #38bdf8; }
+        .input-group input::placeholder, .input-group textarea::placeholder { color: #475569; }
 
         .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; font-weight: 600; }
         .btn-primary { background: #38bdf8; color: #0f172a; }
@@ -48,14 +48,15 @@
         .result-card { background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 16px; border-left: 4px solid transparent; }
         .result-card.visit { border-left-color: #22c55e; }
         .result-card.message { border-left-color: #f59e0b; }
+        .result-card.skipped { border-left-color: #64748b; }
 
         .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
         .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
         .badge-visit { background: rgba(34,197,94,0.15); color: #4ade80; }
         .badge-message { background: rgba(245,158,11,0.15); color: #fbbf24; }
+        .badge-skip { background: rgba(100,116,139,0.15); color: #94a3b8; }
 
         .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .result-field { }
         .result-field .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
         .result-field .value { color: #f8fafc; margin-top: 2px; }
         .result-field .value a { color: #38bdf8; text-decoration: none; }
@@ -64,6 +65,11 @@
         .result-actions { margin-top: 16px; display: flex; gap: 8px; align-items: center; }
 
         .no-result { text-align: center; padding: 40px; color: #64748b; }
+
+        /* Progress bar */
+        .progress-bar { background: #1e293b; border-radius: 8px; height: 8px; margin-bottom: 16px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #38bdf8; border-radius: 8px; transition: width 0.3s; }
+        .progress-text { font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px; }
 
         /* Leads table */
         .leads-filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -83,8 +89,21 @@
         .empty-state { text-align: center; padding: 60px 20px; color: #475569; }
         .empty-state p { margin-top: 8px; }
 
-        /* Warning */
+        /* Warning / Info */
         .warning { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; color: #fbbf24; font-size: 0.85rem; }
+        .info-box { background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 16px; margin-bottom: 16px; color: #7dd3fc; font-size: 0.85rem; }
+
+        /* Route */
+        .route-summary { background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+        .route-stats { display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+        .route-stat { }
+        .route-stat .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; }
+        .route-stat .value { font-size: 1.3rem; font-weight: 700; color: #f8fafc; }
+        .route-stop { background: #0f172a; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+        .stop-number { background: #38bdf8; color: #0f172a; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0; }
+        .stop-info { flex: 1; }
+        .stop-name { font-weight: 600; color: #f8fafc; }
+        .stop-addr { font-size: 0.85rem; color: #94a3b8; }
 
         .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #334155; border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; vertical-align: middle; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -92,6 +111,7 @@
         @media (max-width: 600px) {
             .result-grid { grid-template-columns: 1fr; }
             .lead-card { flex-direction: column; align-items: flex-start; }
+            .route-stats { flex-direction: column; gap: 12px; }
         }
     </style>
 </head>
@@ -102,7 +122,9 @@
 
         <div class="tabs">
             <div class="tab active" data-tab="search">Search</div>
+            <div class="tab" data-tab="bulk">Bulk Upload</div>
             <div class="tab" data-tab="leads">Saved Leads</div>
+            <div class="tab" data-tab="route">Route Planner</div>
         </div>
 
         {% if not scraper_ok %}
@@ -126,8 +148,35 @@
                 </div>
                 <button class="btn btn-primary" id="search-btn" onclick="doSearch()">Search</button>
             </div>
-
             <div id="results"></div>
+        </div>
+
+        <!-- Bulk Upload Tab -->
+        <div class="tab-content" id="tab-bulk">
+            <div class="search-box">
+                <div class="input-group">
+                    <label>Paste links (one per line)</label>
+                    <textarea id="bulk-input" rows="10" placeholder="https://tiktok.com/@business1
+https://instagram.com/business2
+https://facebook.com/business3
+..."></textarea>
+                    <p class="helper">Each link will be searched on Google Maps. Found businesses auto-save as "To Visit", not found as "To Message".</p>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-primary" id="bulk-btn" onclick="startBulk()">Start Processing</button>
+                    <button class="btn btn-ghost" id="bulk-stop-btn" onclick="stopBulk()" style="display:none">Stop</button>
+                </div>
+            </div>
+            <div id="bulk-progress" style="display:none">
+                <div class="progress-text" id="bulk-progress-text">Processing 0 / 0</div>
+                <div class="progress-bar"><div class="progress-fill" id="bulk-progress-fill" style="width:0%"></div></div>
+                <div style="display:flex; gap:16px; margin-bottom:16px; font-size:0.85rem;">
+                    <span style="color:#4ade80" id="bulk-found">Found: 0</span>
+                    <span style="color:#fbbf24" id="bulk-notfound">Not found: 0</span>
+                    <span style="color:#94a3b8" id="bulk-skipped">Skipped: 0</span>
+                </div>
+            </div>
+            <div id="bulk-results"></div>
         </div>
 
         <!-- Leads Tab -->
@@ -143,10 +192,26 @@
             </div>
             <div id="leads-list"></div>
         </div>
+
+        <!-- Route Planner Tab -->
+        <div class="tab-content" id="tab-route">
+            <div class="search-box">
+                <div class="input-group">
+                    <label>Starting Location</label>
+                    <input type="text" id="start-location" placeholder="e.g. San Jose, Costa Rica or paste coordinates: 9.9281,-84.0907">
+                    <p class="helper">Your starting point. Enter a city/address or lat,lng coordinates.</p>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="route-btn" onclick="planRoute()">Optimize Route</button>
+                    <span style="font-size:0.85rem; color:#64748b;">Uses all "To Visit" leads with map coordinates</span>
+                </div>
+            </div>
+            <div id="route-results"></div>
+        </div>
     </div>
 
 <script>
-// Tabs
+// --- Tabs ---
 document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -161,7 +226,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 document.getElementById('url-input').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 document.getElementById('custom-query').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 
-// Search
+// --- Single Search ---
 async function doSearch() {
     const url = document.getElementById('url-input').value.trim();
     const customQuery = document.getElementById('custom-query').value.trim();
@@ -194,7 +259,6 @@ async function doSearch() {
 
 function renderResult(data) {
     const container = document.getElementById('results');
-
     if (data.found) {
         container.innerHTML = `
             <div class="result-card visit">
@@ -206,34 +270,16 @@ function renderResult(data) {
                     <span class="badge badge-visit">Visit</span>
                 </div>
                 <div class="result-grid">
-                    <div class="result-field">
-                        <div class="label">Address</div>
-                        <div class="value">${esc(data.address)}</div>
-                    </div>
-                    <div class="result-field">
-                        <div class="label">Phone</div>
-                        <div class="value">${data.phone ? esc(data.phone) : '—'}</div>
-                    </div>
-                    <div class="result-field">
-                        <div class="label">Website</div>
-                        <div class="value">${data.website ? `<a href="${esc(data.website)}" target="_blank">${esc(data.website)}</a>` : '—'}</div>
-                    </div>
-                    <div class="result-field">
-                        <div class="label">Rating</div>
-                        <div class="value">${data.rating ? data.rating + ' / 5' : '—'}</div>
-                    </div>
-                    <div class="result-field">
-                        <div class="label">Google Maps</div>
-                        <div class="value"><a href="${esc(data.maps_url)}" target="_blank">Open in Maps</a></div>
-                    </div>
-                    <div class="result-field">
-                        <div class="label">Profile</div>
-                        <div class="value"><a href="${esc(data.profile_url)}" target="_blank">${esc(data.profile_url)}</a></div>
-                    </div>
+                    <div class="result-field"><div class="label">Address</div><div class="value">${esc(data.address)}</div></div>
+                    <div class="result-field"><div class="label">Phone</div><div class="value">${data.phone ? esc(data.phone) : '\u2014'}</div></div>
+                    <div class="result-field"><div class="label">Website</div><div class="value">${data.website ? `<a href="${esc(data.website)}" target="_blank">${esc(data.website)}</a>` : '\u2014'}</div></div>
+                    <div class="result-field"><div class="label">Rating</div><div class="value">${data.rating ? data.rating + ' / 5' : '\u2014'}</div></div>
+                    <div class="result-field"><div class="label">Google Maps</div><div class="value"><a href="${esc(data.maps_url)}" target="_blank">Open in Maps</a></div></div>
+                    <div class="result-field"><div class="label">Profile</div><div class="value"><a href="${esc(data.profile_url)}" target="_blank">${esc(data.profile_url)}</a></div></div>
                 </div>
                 <div class="result-actions">
-                    <button class="btn btn-save" onclick='saveLead(${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_visit")'>Save as "To Visit"</button>
-                    <button class="btn btn-sm btn-ghost" onclick='saveLead(${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_message")'>Save as "To Message"</button>
+                    <button class="btn btn-save" onclick='saveLead(event, ${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_visit")'>Save as "To Visit"</button>
+                    <button class="btn btn-sm btn-ghost" onclick='saveLead(event, ${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_message")'>Save as "To Message"</button>
                 </div>
             </div>`;
     } else {
@@ -247,18 +293,15 @@ function renderResult(data) {
                     <span class="badge badge-message">Message</span>
                 </div>
                 <p style="color:#94a3b8; margin-bottom: 12px;">No Google Maps result for @${esc(data.handle)} on ${esc(data.platform)}. Try a custom search name, or reach out on social media.</p>
-                <div class="result-field" style="margin-bottom:12px">
-                    <div class="label">Profile</div>
-                    <div class="value"><a href="${esc(data.profile_url)}" target="_blank">${esc(data.profile_url)}</a></div>
-                </div>
+                <div class="result-field" style="margin-bottom:12px"><div class="label">Profile</div><div class="value"><a href="${esc(data.profile_url)}" target="_blank">${esc(data.profile_url)}</a></div></div>
                 <div class="result-actions">
-                    <button class="btn btn-save" onclick='saveLead(${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_message")'>Save as "To Message"</button>
+                    <button class="btn btn-save" onclick='saveLead(event, ${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_message")'>Save as "To Message"</button>
                 </div>
             </div>`;
     }
 }
 
-async function saveLead(data, status) {
+async function saveLead(e, data, status) {
     data.status = status;
     try {
         await fetch('/api/leads', {
@@ -266,15 +309,96 @@ async function saveLead(data, status) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
         });
-        // Visual feedback
-        event.target.textContent = 'Saved!';
-        event.target.disabled = true;
+        e.target.textContent = 'Saved!';
+        e.target.disabled = true;
     } catch (err) {
         alert('Error saving: ' + err.message);
     }
 }
 
-// Leads
+// --- Bulk Upload ---
+let bulkRunning = false;
+
+async function startBulk() {
+    const text = document.getElementById('bulk-input').value.trim();
+    if (!text) return;
+
+    const urls = text.split('\n').map(u => u.trim()).filter(u => u.length > 0);
+    if (!urls.length) return;
+
+    bulkRunning = true;
+    document.getElementById('bulk-btn').style.display = 'none';
+    document.getElementById('bulk-stop-btn').style.display = '';
+    document.getElementById('bulk-progress').style.display = 'block';
+    document.getElementById('bulk-results').innerHTML = '';
+
+    let found = 0, notfound = 0, skipped = 0;
+
+    for (let i = 0; i < urls.length; i++) {
+        if (!bulkRunning) break;
+
+        const pct = Math.round(((i + 1) / urls.length) * 100);
+        document.getElementById('bulk-progress-text').textContent = `Processing ${i + 1} / ${urls.length}`;
+        document.getElementById('bulk-progress-fill').style.width = pct + '%';
+
+        try {
+            const resp = await fetch('/api/bulk-search', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url: urls[i], auto_save: true})
+            });
+            const data = await resp.json();
+
+            if (data.skipped) {
+                skipped++;
+                appendBulkResult('skipped', urls[i], 'Could not parse URL');
+            } else if (data.found) {
+                found++;
+                appendBulkResult('visit', data.business_name, data.address + (data.phone ? ' | ' + data.phone : ''));
+            } else {
+                notfound++;
+                appendBulkResult('message', '@' + data.handle, 'No Maps listing found');
+            }
+        } catch (err) {
+            skipped++;
+            appendBulkResult('skipped', urls[i], 'Error: ' + err.message);
+        }
+
+        document.getElementById('bulk-found').textContent = 'Found: ' + found;
+        document.getElementById('bulk-notfound').textContent = 'Not found: ' + notfound;
+        document.getElementById('bulk-skipped').textContent = 'Skipped: ' + skipped;
+    }
+
+    bulkRunning = false;
+    document.getElementById('bulk-btn').style.display = '';
+    document.getElementById('bulk-btn').textContent = 'Done! Run Again?';
+    document.getElementById('bulk-stop-btn').style.display = 'none';
+    document.getElementById('bulk-progress-text').textContent = `Finished: ${found} found, ${notfound} not found, ${skipped} skipped`;
+}
+
+function stopBulk() {
+    bulkRunning = false;
+}
+
+function appendBulkResult(type, title, detail) {
+    const container = document.getElementById('bulk-results');
+    const badgeClass = type === 'visit' ? 'badge-visit' : type === 'message' ? 'badge-message' : 'badge-skip';
+    const cardClass = type === 'visit' ? 'visit' : type === 'message' ? 'message' : 'skipped';
+    const label = type === 'visit' ? 'VISIT' : type === 'message' ? 'MESSAGE' : 'SKIP';
+    container.innerHTML += `
+        <div class="result-card ${cardClass}" style="padding:12px 16px; margin-bottom:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong>${esc(title)}</strong>
+                    <span style="color:#94a3b8; margin-left:8px; font-size:0.85rem;">${esc(detail)}</span>
+                </div>
+                <span class="badge ${badgeClass}">${label}</span>
+            </div>
+        </div>`;
+    container.scrollTop = container.scrollHeight;
+}
+
+// --- Leads ---
 let currentFilter = '';
 
 document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -303,7 +427,6 @@ function renderLeads(leads) {
         container.innerHTML = '<div class="empty-state"><p>No leads yet. Search for some profiles!</p></div>';
         return;
     }
-
     container.innerHTML = leads.map(lead => `
         <div class="lead-card" id="lead-${lead.id}">
             <div class="lead-info">
@@ -349,6 +472,114 @@ async function deleteLead(id) {
     if (!confirm('Delete this lead?')) return;
     await fetch(`/api/leads/${id}`, {method: 'DELETE'});
     document.getElementById('lead-' + id).remove();
+}
+
+// --- Route Planner ---
+async function planRoute() {
+    const locInput = document.getElementById('start-location').value.trim();
+    const btn = document.getElementById('route-btn');
+    const container = document.getElementById('route-results');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Optimizing...';
+    container.innerHTML = '';
+
+    let startLat = null, startLng = null;
+
+    // Parse coordinates if provided as lat,lng
+    if (locInput) {
+        const coordMatch = locInput.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+        if (coordMatch) {
+            startLat = parseFloat(coordMatch[1]);
+            startLng = parseFloat(coordMatch[2]);
+        } else {
+            // Geocode the location name via OSRM/Nominatim
+            try {
+                const geoResp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locInput)}&limit=1`);
+                const geoData = await geoResp.json();
+                if (geoData.length > 0) {
+                    startLat = parseFloat(geoData[0].lat);
+                    startLng = parseFloat(geoData[0].lon);
+                }
+            } catch (e) { /* ignore, will proceed without start */ }
+        }
+    }
+
+    try {
+        const body = {};
+        if (startLat !== null) {
+            body.start_lat = startLat;
+            body.start_lng = startLng;
+        }
+
+        const resp = await fetch('/api/optimize-route', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            container.innerHTML = `<div class="no-result">${data.error}</div>`;
+            return;
+        }
+
+        renderRoute(data, startLat, startLng, locInput);
+    } catch (err) {
+        container.innerHTML = `<div class="no-result">Error: ${err.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Optimize Route';
+    }
+}
+
+function renderRoute(data, startLat, startLng, startName) {
+    const container = document.getElementById('route-results');
+
+    let stopsHtml = '';
+    if (startLat !== null) {
+        stopsHtml += `
+            <div class="route-stop">
+                <div class="stop-number">S</div>
+                <div class="stop-info">
+                    <div class="stop-name">Start: ${esc(startName)}</div>
+                    <div class="stop-addr">${startLat}, ${startLng}</div>
+                </div>
+            </div>`;
+    }
+
+    data.ordered_leads.forEach((lead, i) => {
+        stopsHtml += `
+            <div class="route-stop">
+                <div class="stop-number">${i + 1}</div>
+                <div class="stop-info">
+                    <div class="stop-name">${esc(lead.business_name || lead.handle)}</div>
+                    <div class="stop-addr">${esc(lead.address)} ${lead.phone ? '| ' + esc(lead.phone) : ''}</div>
+                </div>
+            </div>`;
+    });
+
+    container.innerHTML = `
+        <div class="route-summary">
+            <div class="route-stats">
+                <div class="route-stat">
+                    <div class="label">Stops</div>
+                    <div class="value">${data.ordered_leads.length}</div>
+                </div>
+                <div class="route-stat">
+                    <div class="label">Total Distance</div>
+                    <div class="value">${data.total_distance_km} km</div>
+                </div>
+                <div class="route-stat">
+                    <div class="label">Drive Time</div>
+                    <div class="value">${data.total_duration_min} min</div>
+                </div>
+            </div>
+            <a href="${esc(data.google_maps_url)}" target="_blank" class="btn btn-primary" style="display:inline-block; text-decoration:none; margin-bottom:16px;">
+                Open Route in Google Maps
+            </a>
+            <div>${stopsHtml}</div>
+        </div>`;
 }
 
 function esc(str) {
