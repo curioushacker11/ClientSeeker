@@ -456,7 +456,7 @@ function renderLeads(leads) {
                     @${esc(lead.handle)} on ${esc(lead.platform)}
                     ${lead.address ? ` &middot; ${esc(lead.address)}` : ''}
                     ${lead.maps_url
-                        ? ` &middot; <a href="${esc(lead.maps_url)}" target="_blank">Maps</a> <button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="editMapsUrl(${lead.id})">edit</button>`
+                        ? ` &middot; <a href="${esc(lead.maps_url)}" target="_blank">Maps</a> <button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="editMapsUrl(${lead.id})">edit</button><button class="btn btn-sm btn-danger" style="padding:1px 5px;font-size:0.65rem;margin-left:2px;" onclick="removeMapsUrl(${lead.id})">x</button>`
                         : ` &middot; <button class="btn btn-sm btn-save" style="padding:2px 8px;font-size:0.7rem;" onclick="editMapsUrl(${lead.id})">+ Add Maps link</button>`
                     }
                     &middot; <a href="${esc(lead.profile_url)}" target="_blank">Profile</a>
@@ -465,7 +465,7 @@ function renderLeads(leads) {
                 ${lead.notes ? `<div class="lead-meta" style="margin-top:4px;color:#64748b">Note: ${esc(lead.notes)}</div>` : ''}
             </div>
             <div class="lead-actions">
-                <select class="status-select" onchange="updateLead(${lead.id}, 'status', this.value).then(()=>loadLeads())">
+                <select class="status-select" onchange="changeStatus(${lead.id}, this.value)">
                     ${['new','to_visit','to_message','contacted','client','skip'].map(s =>
                         `<option value="${s}" ${lead.status===s?'selected':''}>${s.replace('_',' ')}</option>`
                     ).join('')}
@@ -483,6 +483,19 @@ async function updateLead(id, field, value) {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({[field]: value})
     });
+}
+
+async function changeStatus(id, status) {
+    await updateLead(id, 'status', status);
+    if (status === 'to_message') {
+        await updateLead(id, 'maps_url', '');
+    }
+    loadLeads();
+}
+
+async function removeMapsUrl(id) {
+    await updateLead(id, 'maps_url', '');
+    loadLeads();
 }
 
 async function editName(id, current) {
