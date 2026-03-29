@@ -66,8 +66,9 @@ def reverse_geocode(lat, lng):
         resp.raise_for_status()
         data = resp.json()
         addr = data.get("address", {})
-        province = addr.get("state", "")
-        canton = addr.get("county", "")
+        # Costa Rica: Nominatim uses "province" not "state", and "city_district" for canton
+        province = addr.get("province", "") or addr.get("state", "")
+        canton = addr.get("city_district", "") or addr.get("county", "")
         return province, canton
     except Exception:
         return "", ""
