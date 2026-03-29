@@ -1,3 +1,4 @@
+import html
 import os
 import re
 import sqlite3
@@ -138,14 +139,25 @@ def index():
     return render_template("index.html", scraper_ok=scraper_ok)
 
 
+def _clean(text):
+    """Decode HTML entities and strip review count strings from scraper output."""
+    if not text:
+        return text
+    text = html.unescape(str(text))
+    # Remove trailing review counts like "6 opiniones", "12 reviews", "- 6 opiniones"
+    text = re.sub(r'\s*-?\s*\d+\s*(opiniones|reviews|rese[ñn]as|comentarios)\s*$', '', text, flags=re.IGNORECASE)
+    return text.strip()
+
+
 def _place_to_dict(place):
     coords = place.get("coordinates", {})
     return {
-        "business_name": place.get("name", ""),
-        "address": place.get("address", ""),
-        "phone": place.get("phone", ""),
+        "business_name": _clean(place.get("name", "")),
+        "address": _clean(place.get("address", "")),
+        "phone": _clean(place.get("phone", "")),
         "website": place.get("website", ""),
         "rating": place.get("rating"),
+        "reviews_count": place.get("reviews_count"),
         "maps_url": place.get("link", ""),
         "lat": coords.get("latitude"),
         "lng": coords.get("longitude"),
