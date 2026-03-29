@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClientSeeker</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+        h1 { font-size: 1.8rem; margin-bottom: 4px; color: #f8fafc; }
+        .subtitle { color: #94a3b8; margin-bottom: 24px; font-size: 0.9rem; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 2px solid #1e293b; }
+        .tab { padding: 10px 20px; cursor: pointer; color: #94a3b8; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+        .tab:hover { color: #e2e8f0; }
+        .tab.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Search form */
+        .search-box { background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+        .input-group { margin-bottom: 14px; }
+        .input-group label { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 6px; }
+        .input-group input { width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #f8fafc; font-size: 1rem; outline: none; transition: border-color 0.2s; }
+        .input-group input:focus { border-color: #38bdf8; }
+        .input-group input::placeholder { color: #475569; }
+
+        .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; font-weight: 600; }
+        .btn-primary { background: #38bdf8; color: #0f172a; }
+        .btn-primary:hover { background: #7dd3fc; }
+        .btn-primary:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+        .btn-save { background: #22c55e; color: #fff; padding: 8px 16px; font-size: 0.85rem; }
+        .btn-save:hover { background: #4ade80; }
+        .btn-sm { padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; }
+        .btn-danger { background: #ef4444; color: #fff; }
+        .btn-danger:hover { background: #f87171; }
+        .btn-ghost { background: transparent; border: 1px solid #334155; color: #94a3b8; }
+        .btn-ghost:hover { border-color: #64748b; color: #e2e8f0; }
+
+        .helper { font-size: 0.8rem; color: #64748b; margin-top: 6px; }
+
+        /* Results */
+        .result-card { background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 16px; border-left: 4px solid transparent; }
+        .result-card.visit { border-left-color: #22c55e; }
+        .result-card.message { border-left-color: #f59e0b; }
+
+        .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+        .badge-visit { background: rgba(34,197,94,0.15); color: #4ade80; }
+        .badge-message { background: rgba(245,158,11,0.15); color: #fbbf24; }
+
+        .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .result-field { }
+        .result-field .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+        .result-field .value { color: #f8fafc; margin-top: 2px; }
+        .result-field .value a { color: #38bdf8; text-decoration: none; }
+        .result-field .value a:hover { text-decoration: underline; }
+
+        .result-actions { margin-top: 16px; display: flex; gap: 8px; align-items: center; }
+
+        .no-result { text-align: center; padding: 40px; color: #64748b; }
+
+        /* Leads table */
+        .leads-filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid #334155; background: transparent; color: #94a3b8; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+        .filter-btn:hover { border-color: #64748b; }
+        .filter-btn.active { background: #38bdf8; color: #0f172a; border-color: #38bdf8; }
+
+        .lead-card { background: #1e293b; border-radius: 10px; padding: 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+        .lead-info { flex: 1; }
+        .lead-name { font-weight: 600; color: #f8fafc; }
+        .lead-meta { font-size: 0.85rem; color: #94a3b8; margin-top: 4px; }
+        .lead-meta a { color: #38bdf8; text-decoration: none; }
+        .lead-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+        .status-select { padding: 6px 10px; border-radius: 6px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; font-size: 0.8rem; }
+
+        .empty-state { text-align: center; padding: 60px 20px; color: #475569; }
+        .empty-state p { margin-top: 8px; }
+
+        /* Warning */
+        .warning { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; color: #fbbf24; font-size: 0.85rem; }
+
+        .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #334155; border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 600px) {
+            .result-grid { grid-template-columns: 1fr; }
+            .lead-card { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ClientSeeker</h1>
+        <p class="subtitle">Find business locations from social media profiles</p>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="search">Search</div>
+            <div class="tab" data-tab="leads">Saved Leads</div>
+        </div>
+
+        {% if not api_configured %}
+        <div class="warning">
+            Google Places API key not configured. Create a <strong>.env</strong> file with your key. See .env.example.
+        </div>
+        {% endif %}
+
+        <!-- Search Tab -->
+        <div class="tab-content active" id="tab-search">
+            <div class="search-box">
+                <div class="input-group">
+                    <label>Social Media Profile URL</label>
+                    <input type="text" id="url-input" placeholder="https://tiktok.com/@businessname" autofocus>
+                    <p class="helper">Supports TikTok, Instagram, Facebook profile links</p>
+                </div>
+                <div class="input-group">
+                    <label>Custom Search Name (optional)</label>
+                    <input type="text" id="custom-query" placeholder="Override the extracted name if needed">
+                    <p class="helper">Leave empty to auto-extract from URL. Use this if the handle doesn't match the business name.</p>
+                </div>
+                <button class="btn btn-primary" id="search-btn" onclick="doSearch()">Search</button>
+            </div>
+
+            <div id="results"></div>
+        </div>
+
+        <!-- Leads Tab -->
+        <div class="tab-content" id="tab-leads">
+            <div class="leads-filters">
+                <button class="filter-btn active" data-status="">All</button>
+                <button class="filter-btn" data-status="new">New</button>
+                <button class="filter-btn" data-status="to_visit">To Visit</button>
+                <button class="filter-btn" data-status="to_message">To Message</button>
+                <button class="filter-btn" data-status="contacted">Contacted</button>
+                <button class="filter-btn" data-status="client">Client</button>
+                <button class="filter-btn" data-status="skip">Skip</button>
+            </div>
+            <div id="leads-list"></div>
+        </div>
+    </div>
+
+<script>
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+        if (tab.dataset.tab === 'leads') loadLeads();
+    });
+});
+
+// Enter key triggers search
+document.getElementById('url-input').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+document.getElementById('custom-query').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+// Search
+async function doSearch() {
+    const url = document.getElementById('url-input').value.trim();
+    const customQuery = document.getElementById('custom-query').value.trim();
+    if (!url) return;
+
+    const btn = document.getElementById('search-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Searching...';
+    document.getElementById('results').innerHTML = '';
+
+    try {
+        const resp = await fetch('/api/search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({url, custom_query: customQuery})
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            document.getElementById('results').innerHTML = `<div class="no-result">${data.error}</div>`;
+            return;
+        }
+        renderResult(data);
+    } catch (err) {
+        document.getElementById('results').innerHTML = `<div class="no-result">Error: ${err.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Search';
+    }
+}
+
+function renderResult(data) {
+    const container = document.getElementById('results');
+
+    if (data.found) {
+        container.innerHTML = `
+            <div class="result-card visit">
+                <div class="result-header">
+                    <div>
+                        <strong style="font-size:1.1rem">${esc(data.business_name)}</strong>
+                        <span style="color:#94a3b8; margin-left:8px;">@${esc(data.handle)} on ${esc(data.platform)}</span>
+                    </div>
+                    <span class="badge badge-visit">Visit</span>
+                </div>
+                <div class="result-grid">
+                    <div class="result-field">
+                        <div class="label">Address</div>
+                        <div class="value">${esc(data.address)}</div>
+                    </div>
+                    <div class="result-field">
+                        <div class="label">Phone</div>
+                        <div class="value">${data.phone ? esc(data.phone) : '—'}</div>
+                    </div>
+                    <div class="result-field">
+                        <div class="label">Website</div>
+                        <div class="value">${data.website ? `<a href="${esc(data.website)}" target="_blank">${esc(data.website)}</a>` : '—'}</div>
+                    </div>
+                    <div class="result-field">
+                        <div class="label">Rating</div>
+                        <div class="value">${data.rating ? data.rating + ' / 5' : '—'}</div>
+                    </div>
+                    <div class="result-field">
+                        <div class="label">Google Maps</div>
+                        <div class="value"><a href="${esc(data.maps_url)}" target="_blank">Open in Maps</a></div>
+                    </div>
+                    <div class="result-field">
+                        <div class="label">Profile</div>
+                        <div class="value"><a href="${esc(data.profile_url)}" target="_blank">${esc(data.profile_url)}</a></div>
+                    </div>
+                </div>
+                <div class="result-actions">
+                    <button class="btn btn-save" onclick='saveLead(${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_visit")'>Save as "To Visit"</button>
+                    <button class="btn btn-sm btn-ghost" onclick='saveLead(${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_message")'>Save as "To Message"</button>
+                </div>
+            </div>`;
+    } else {
+        container.innerHTML = `
+            <div class="result-card message">
+                <div class="result-header">
+                    <div>
+                        <strong style="font-size:1.1rem">No business listing found</strong>
+                        <span style="color:#94a3b8; margin-left:8px;">Searched: "${esc(data.search_query)}"</span>
+                    </div>
+                    <span class="badge badge-message">Message</span>
+                </div>
+                <p style="color:#94a3b8; margin-bottom: 12px;">No Google Maps result for @${esc(data.handle)} on ${esc(data.platform)}. Try a custom search name, or reach out on social media.</p>
+                <div class="result-field" style="margin-bottom:12px">
+                    <div class="label">Profile</div>
+                    <div class="value"><a href="${esc(data.profile_url)}" target="_blank">${esc(data.profile_url)}</a></div>
+                </div>
+                <div class="result-actions">
+                    <button class="btn btn-save" onclick='saveLead(${JSON.stringify(data).replace(/'/g, "&#39;")}, "to_message")'>Save as "To Message"</button>
+                </div>
+            </div>`;
+    }
+}
+
+async function saveLead(data, status) {
+    data.status = status;
+    try {
+        await fetch('/api/leads', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        // Visual feedback
+        event.target.textContent = 'Saved!';
+        event.target.disabled = true;
+    } catch (err) {
+        alert('Error saving: ' + err.message);
+    }
+}
+
+// Leads
+let currentFilter = '';
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.status;
+        loadLeads();
+    });
+});
+
+async function loadLeads() {
+    const url = currentFilter ? `/api/leads?status=${currentFilter}` : '/api/leads';
+    try {
+        const resp = await fetch(url);
+        const leads = await resp.json();
+        renderLeads(leads);
+    } catch (err) {
+        document.getElementById('leads-list').innerHTML = `<div class="no-result">Error loading leads</div>`;
+    }
+}
+
+function renderLeads(leads) {
+    const container = document.getElementById('leads-list');
+    if (!leads.length) {
+        container.innerHTML = '<div class="empty-state"><p>No leads yet. Search for some profiles!</p></div>';
+        return;
+    }
+
+    container.innerHTML = leads.map(lead => `
+        <div class="lead-card" id="lead-${lead.id}">
+            <div class="lead-info">
+                <div class="lead-name">${esc(lead.business_name || lead.handle)}</div>
+                <div class="lead-meta">
+                    @${esc(lead.handle)} on ${esc(lead.platform)}
+                    ${lead.address ? ` &middot; ${esc(lead.address)}` : ''}
+                    ${lead.maps_url ? ` &middot; <a href="${esc(lead.maps_url)}" target="_blank">Maps</a>` : ''}
+                    &middot; <a href="${esc(lead.profile_url)}" target="_blank">Profile</a>
+                    ${lead.phone ? ` &middot; ${esc(lead.phone)}` : ''}
+                </div>
+                ${lead.notes ? `<div class="lead-meta" style="margin-top:4px;color:#64748b">Note: ${esc(lead.notes)}</div>` : ''}
+            </div>
+            <div class="lead-actions">
+                <select class="status-select" onchange="updateLead(${lead.id}, 'status', this.value)">
+                    ${['new','to_visit','to_message','contacted','client','skip'].map(s =>
+                        `<option value="${s}" ${lead.status===s?'selected':''}>${s.replace('_',' ')}</option>`
+                    ).join('')}
+                </select>
+                <button class="btn btn-sm btn-ghost" onclick="addNote(${lead.id})">Note</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteLead(${lead.id})">X</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function updateLead(id, field, value) {
+    await fetch(`/api/leads/${id}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({[field]: value})
+    });
+}
+
+async function addNote(id) {
+    const note = prompt('Add a note:');
+    if (note === null) return;
+    await updateLead(id, 'notes', note);
+    loadLeads();
+}
+
+async function deleteLead(id) {
+    if (!confirm('Delete this lead?')) return;
+    await fetch(`/api/leads/${id}`, {method: 'DELETE'});
+    document.getElementById('lead-' + id).remove();
+}
+
+function esc(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+</script>
+</body>
+</html>
