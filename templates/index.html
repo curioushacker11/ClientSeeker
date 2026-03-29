@@ -105,9 +105,9 @@
             <div class="tab" data-tab="leads">Saved Leads</div>
         </div>
 
-        {% if not api_configured %}
+        {% if not scraper_ok %}
         <div class="warning">
-            Google Places API key not configured. Create a <strong>.env</strong> file with your key. See .env.example.
+            Scraper not running. Start it with: <strong>docker-compose -f scraper/docker-compose.yml up -d</strong>
         </div>
         {% endif %}
 

@@ -11,7 +11,7 @@ load_dotenv()
 
 app = Flask(__name__)
 DATABASE = os.path.join(app.instance_path, "leads.db")
-GOOGLE_API_KEY = os.environ.get("GOOGLE_PLACES_API_KEY", "")
+SCRAPER_URL = os.environ.get("SCRAPER_URL", "http://localhost:8001")
 
 
 # --- Database ---
@@ -102,33 +102,23 @@ def handle_to_search_name(handle):
     return name
 
 
-# --- Google Places Search ---
+# --- Google Maps Scraper ---
 
-def search_google_places(query):
-    """Search Google Places API (New) for a business."""
-    if not GOOGLE_API_KEY:
-        return None, "No API key configured"
-
-    url = "https://places.googleapis.com/v1/places:searchText"
-    headers = {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": GOOGLE_API_KEY,
-        "X-Goog-FieldMask": (
-            "places.displayName,places.formattedAddress,places.googleMapsUri,"
-            "places.nationalPhoneNumber,places.websiteUri,places.rating,"
-            "places.location,places.types,places.businessStatus"
-        ),
-    }
-    payload = {"textQuery": query}
-
+def search_maps(query):
+    """Search Google Maps via the local scraper service."""
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=10)
+        resp = requests.get(
+            f"{SCRAPER_URL}/scrape-get",
+            params={"query": query, "max_places": 1, "lang": "en", "headless": True, "concurrency": 1},
+            timeout=60,
+        )
         resp.raise_for_status()
-        data = resp.json()
-        places = data.get("places", [])
-        if not places:
+        results = resp.json()
+        if not results:
             return None, "No results found"
-        return places[0], None
+        return results[0], None
+    except requests.ConnectionError:
+        return None, "Scraper not running. Start it with: docker-compose -f scraper/docker-compose.yml up"
     except requests.RequestException as e:
         return None, str(e)
 
@@ -137,7 +127,14 @@ def search_google_places(query):
 
 @app.route("/")
 def index():
-    return render_template("index.html", api_configured=bool(GOOGLE_API_KEY))
+    # Check if scraper is reachable
+    scraper_ok = False
+    try:
+        r = requests.get(f"{SCRAPER_URL}/", timeout=3)
+        scraper_ok = r.ok
+    except Exception:
+        pass
+    return render_template("index.html", scraper_ok=scraper_ok)
 
 
 @app.route("/api/search", methods=["POST"])
@@ -154,7 +151,7 @@ def search():
         return jsonify({"error": "Could not extract handle from URL. Supported: TikTok, Instagram, Facebook"}), 400
 
     search_name = custom_query if custom_query else handle_to_search_name(handle)
-    place, err = search_google_places(search_name)
+    place, err = search_maps(search_name)
 
     result = {
         "platform": platform,
@@ -165,15 +162,15 @@ def search():
 
     if place:
         result["found"] = True
-        result["business_name"] = place.get("displayName", {}).get("text", "")
-        result["address"] = place.get("formattedAddress", "")
-        result["phone"] = place.get("nationalPhoneNumber", "")
-        result["website"] = place.get("websiteUri", "")
+        result["business_name"] = place.get("name", "")
+        result["address"] = place.get("address", "")
+        result["phone"] = place.get("phone", "")
+        result["website"] = place.get("website", "")
         result["rating"] = place.get("rating")
-        result["maps_url"] = place.get("googleMapsUri", "")
-        loc = place.get("location", {})
-        result["lat"] = loc.get("latitude")
-        result["lng"] = loc.get("longitude")
+        result["maps_url"] = place.get("link", "")
+        coords = place.get("coordinates", {})
+        result["lat"] = coords.get("latitude")
+        result["lng"] = coords.get("longitude")
         result["action"] = "visit"
     else:
         result["found"] = False
