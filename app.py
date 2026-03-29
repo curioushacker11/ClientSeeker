@@ -473,17 +473,50 @@ def _save_lead(data):
 
 # --- Zone Classification ---
 
+def extract_coords_from_maps_url(maps_url):
+    """Try to extract lat/lng from a Google Maps URL."""
+    if not maps_url:
+        return None, None
+    # Pattern: /@lat,lng or /place/.../@lat,lng
+    match = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', maps_url)
+    if match:
+        return float(match.group(1)), float(match.group(2))
+    # Pattern: !3d=lat!4d=lng (in data params)
+    match = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', maps_url)
+    if match:
+        return float(match.group(1)), float(match.group(2))
+    return None, None
+
+
 @app.route("/api/classify-zones", methods=["POST"])
 def classify_zones():
-    """Reverse geocode and classify zones for all leads with coordinates."""
+    """Backfill coordinates from Maps URLs, then reverse geocode and classify zones."""
     db = get_db()
-    rows = db.execute(
+
+    # Step 1: Extract coords from Maps URLs for leads that have a URL but no coords
+    url_rows = db.execute(
+        "SELECT id, maps_url FROM leads "
+        "WHERE maps_url IS NOT NULL AND maps_url != '' "
+        "AND (lat IS NULL OR lng IS NULL)"
+    ).fetchall()
+
+    coords_filled = 0
+    for row in url_rows:
+        lat, lng = extract_coords_from_maps_url(row["maps_url"])
+        if lat is not None:
+            db.execute("UPDATE leads SET lat = ?, lng = ? WHERE id = ?",
+                       (lat, lng, row["id"]))
+            coords_filled += 1
+    db.commit()
+
+    # Step 2: Reverse geocode and classify all leads with coords but no zone
+    geo_rows = db.execute(
         "SELECT id, lat, lng FROM leads WHERE lat IS NOT NULL AND lng IS NOT NULL "
         "AND (zone IS NULL OR zone = '')"
     ).fetchall()
 
     classified = 0
-    for row in rows:
+    for row in geo_rows:
         province, canton = reverse_geocode(row["lat"], row["lng"])
         zone = classify_zone(province, canton)
         db.execute("UPDATE leads SET zone = ? WHERE id = ?", (zone, row["id"]))
@@ -491,7 +524,7 @@ def classify_zones():
         time.sleep(1.1)  # Nominatim rate limit: 1 req/sec
 
     db.commit()
-    return jsonify({"classified": classified})
+    return jsonify({"coords_filled": coords_filled, "classified": classified})
 
 
 @app.route("/api/zones", methods=["GET"])
