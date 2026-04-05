@@ -14,7 +14,6 @@ load_dotenv()
 app = Flask(__name__)
 DATABASE = os.path.join(app.instance_path, "leads.db")
 SCRAPER_URL = os.environ.get("SCRAPER_URL", "http://localhost:8001")
-DEFAULT_REGION = "Costa Rica"
 
 
 # --- Zone Definitions ---
@@ -84,24 +83,35 @@ def classify_lead_zone(lat, lng):
 
 # --- Follower Count ---
 
+TIKTOK_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/120.0.0.0 Safari/537.36",
+}
+
+
 def fetch_followers(platform, profile_url):
     """Try to fetch follower count from the social media profile page."""
     if platform != "tiktok":
         return None
     try:
-        resp = requests.get(
-            profile_url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/120.0.0.0 Safari/537.36",
-            },
-            timeout=10,
-        )
+        resp = requests.get(profile_url, headers=TIKTOK_HEADERS, timeout=10)
         # TikTok embeds followerCount in page source JSON
         match = re.search(r'"followerCount"\s*:\s*(\d+)', resp.text)
         if match:
             return int(match.group(1))
+    except Exception:
+        pass
+    return None
+
+
+def fetch_tiktok_name(profile_url):
+    """Fetch the display name (nickname) from a TikTok profile page."""
+    try:
+        resp = requests.get(profile_url, headers=TIKTOK_HEADERS, timeout=10)
+        match = re.search(r'"nickname"\s*:\s*"([^"]+)"', resp.text)
+        if match:
+            return match.group(1)
     except Exception:
         pass
     return None
@@ -283,10 +293,15 @@ def search():
     if not handle:
         return jsonify({"error": "Could not extract handle from URL. Supported: TikTok, Instagram, Facebook"}), 400
 
-    # Search exact handle name — no transformation
+    # For TikTok, fetch display name and use it for Maps search
     search_name = custom_query if custom_query else handle
-    query_with_region = f"{search_name} {DEFAULT_REGION}"
-    place, err = search_maps(query_with_region, max_results=1)
+    tiktok_name = None
+    if platform == "tiktok" and not custom_query:
+        tiktok_name = fetch_tiktok_name(full_url)
+        if tiktok_name:
+            search_name = tiktok_name
+    query = search_name
+    place, err = search_maps(query, max_results=1)
 
     result = {
         "platform": platform,
@@ -315,6 +330,38 @@ def search():
         result["followers_display"] = format_followers(followers)
 
     return jsonify(result)
+
+
+@app.route("/api/check-duplicate", methods=["POST"])
+def check_duplicate():
+    """Check if a lead with same handle+platform or business_name already exists."""
+    data = request.json or {}
+    handle = data.get("handle", "").strip().lower()
+    platform = data.get("platform", "").strip().lower()
+    business_name = data.get("business_name", "").strip()
+    db = get_db()
+
+    dupes = []
+    if handle and platform:
+        rows = db.execute(
+            "SELECT id, handle, platform, business_name, status, followers FROM leads "
+            "WHERE LOWER(handle) = ? AND LOWER(platform) = ?",
+            (handle, platform),
+        ).fetchall()
+        dupes.extend([dict(r) for r in rows])
+
+    if business_name:
+        seen_ids = {d["id"] for d in dupes}
+        rows = db.execute(
+            "SELECT id, handle, platform, business_name, status, followers FROM leads "
+            "WHERE LOWER(business_name) = LOWER(?)",
+            (business_name,),
+        ).fetchall()
+        for r in rows:
+            if r["id"] not in seen_ids:
+                dupes.append(dict(r))
+
+    return jsonify({"duplicates": dupes})
 
 
 @app.route("/api/leads", methods=["POST"])
@@ -411,15 +458,36 @@ def bulk_search():
     if not handle:
         return jsonify({"skipped": True, "url": url, "reason": "Could not extract handle"}), 200
 
-    # Search exact handle name
-    query_with_region = f"{handle} {DEFAULT_REGION}"
-    place, err = search_maps(query_with_region, max_results=1)
+    # Check for duplicates
+    db = get_db()
+    existing = db.execute(
+        "SELECT id, business_name, status FROM leads "
+        "WHERE LOWER(handle) = ? AND LOWER(platform) = ?",
+        (handle.lower(), platform.lower()),
+    ).fetchone()
+    if existing:
+        return jsonify({
+            "skipped": True, "duplicate": True, "url": url,
+            "handle": handle, "platform": platform,
+            "existing_name": existing["business_name"],
+            "existing_status": existing["status"],
+            "reason": f"Duplicate: already saved as '{existing['business_name']}' ({existing['status']})",
+        }), 200
+
+    # For TikTok, fetch display name and use it for Maps search
+    search_name = handle
+    if platform == "tiktok":
+        tiktok_name = fetch_tiktok_name(full_url)
+        if tiktok_name:
+            search_name = tiktok_name
+    query = search_name
+    place, err = search_maps(query, max_results=1)
 
     result = {
         "platform": platform,
         "handle": handle,
         "profile_url": full_url,
-        "search_query": handle,
+        "search_query": search_name,
     }
 
     if place:
@@ -522,10 +590,10 @@ def classify_zones():
             coords_filled += 1
     db.commit()
 
-    # Step 2: Reverse geocode and classify all leads with coords but no zone
+    # Step 2: Reverse geocode and classify leads with coords but no zone or "Unclassified"
     geo_rows = db.execute(
         "SELECT id, lat, lng FROM leads WHERE lat IS NOT NULL AND lng IS NOT NULL "
-        "AND (zone IS NULL OR zone = '')"
+        "AND (zone IS NULL OR zone = '' OR zone = 'Unclassified')"
     ).fetchall()
 
     classified = 0
@@ -589,6 +657,65 @@ def fetch_all_followers():
         time.sleep(1)  # Rate limit
     db.commit()
     return jsonify({"fetched": fetched, "failed": failed, "total": len(rows)})
+
+
+@app.route("/api/fix-tiktok-names", methods=["POST"])
+def fix_tiktok_names():
+    """Fetch real display names from TikTok and re-search Maps for all TikTok leads."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, handle, profile_url, business_name FROM leads "
+        "WHERE platform = 'tiktok'"
+    ).fetchall()
+
+    fixed = 0
+    skipped = 0
+    failed = 0
+    for row in rows:
+        bname = (row["business_name"] or "").strip()
+        handle = (row["handle"] or "").strip()
+        if bname and bname.lower() != handle.lower():
+            skipped += 1
+            continue
+        name = fetch_tiktok_name(row["profile_url"])
+        if name:
+            db.execute("UPDATE leads SET business_name = ? WHERE id = ?",
+                       (name, row["id"]))
+            fixed += 1
+        else:
+            failed += 1
+        time.sleep(1)
+    db.commit()
+    return jsonify({"fixed": fixed, "skipped": skipped,
+                    "failed": failed, "total": len(rows)})
+
+
+@app.route("/api/re-search/<int:lead_id>", methods=["POST"])
+def re_search_lead(lead_id):
+    """Re-search Google Maps using the lead's current business_name."""
+    db = get_db()
+    row = db.execute(
+        "SELECT id, business_name, handle FROM leads WHERE id = ?", (lead_id,)
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "Lead not found"}), 404
+
+    search_name = row["business_name"] or row["handle"]
+    place, err = search_maps(search_name, max_results=1)
+
+    if not place:
+        return jsonify({"found": False, "error": err or "No results"})
+
+    data = _place_to_dict(place)
+    zone = classify_lead_zone(data.get("lat"), data.get("lng"))
+    db.execute(
+        "UPDATE leads SET address=?, phone=?, website=?, rating=?, "
+        "maps_url=?, lat=?, lng=?, zone=? WHERE id=?",
+        (data["address"], data["phone"], data["website"], data["rating"],
+         data["maps_url"], data["lat"], data["lng"], zone, lead_id),
+    )
+    db.commit()
+    return jsonify({"found": True, "data": data, "zone": zone})
 
 
 # --- Route Optimizer ---

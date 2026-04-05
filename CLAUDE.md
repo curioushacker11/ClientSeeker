@@ -30,8 +30,10 @@ docker-compose.yml          # Runs both services
 
 - **Single search**: one link at a time, shows result with save options
 - **Bulk upload**: paste list of links, processes sequentially, auto-saves
+- **Add Lead**: manual entry form (name, platform, status, profile URL, Maps link, followers, phone, notes)
+- **Duplicate detection**: checks handle+platform and business_name before saving. Single search & Add Lead show confirm dialog; bulk upload auto-skips with red DUPLICATE badge
 - **Leads management**: status tracking, notes, reviewed checkbox, edit name/maps/followers
-- **Follower count**: auto-fetch for TikTok, manual edit for others
+- **Follower count**: auto-fetch for TikTok, manual edit for others. Supports K/M input (e.g. "89.2K" → 89200). Click the follower badge to edit existing values
 - **Zone system**: Central (Alajuela, Heredia, Cartago, San José minus excluded cantons), Pérez Zeledón, Unclassified
 - **Route planner**: filter by zone, set starting point, OSRM optimized route, Google Maps link
 - **Mobile friendly**: accessible on phone via local network, persists tab state across reloads
@@ -82,3 +84,5 @@ SQLite at `instance/leads.db`. Key columns:
 - **Search region**: always appends "Costa Rica" to handle name
 - Search uses **exact handle name** — no underscore/dot to space conversion
 - `_clean()` strips HTML entities (`&nbsp;`) and review count text ("6 opiniones") from scraper output
+- **Duplicate check** runs on `/api/check-duplicate` (by handle+platform and business_name). Bulk search checks server-side and skips automatically
+- **TikTok follower fetch** is unreliable (server-side scraping, TikTok blocks/rate-limits). Manual edit is the fallback

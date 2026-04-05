@@ -49,6 +49,7 @@
         .badge-skip { background: rgba(100,116,139,0.15); color: #94a3b8; }
         .badge-zone { background: rgba(139,92,246,0.15); color: #a78bfa; font-size: 0.7rem; padding: 2px 8px; margin-left: 6px; }
         .badge-followers { background: rgba(56,189,248,0.15); color: #7dd3fc; font-size: 0.7rem; padding: 2px 8px; margin-left: 6px; }
+        .badge-duplicate { background: rgba(239,68,68,0.15); color: #f87171; }
 
         .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .result-field .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -68,7 +69,7 @@
         .filter-btn.active { background: #38bdf8; color: #0f172a; border-color: #38bdf8; }
 
         .lead-card { background: #1e293b; border-radius: 10px; padding: 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-        .lead-card.reviewed { opacity: 0.6; }
+        .lead-card.reviewed { }
         .lead-checkbox { width: 20px; height: 20px; accent-color: #22c55e; cursor: pointer; flex-shrink: 0; }
         .lead-info { flex: 1; min-width: 0; }
         .lead-name { font-weight: 600; color: #f8fafc; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
@@ -115,6 +116,7 @@
             <div class="tab active" data-tab="search">Search</div>
             <div class="tab" data-tab="bulk">Bulk Upload</div>
             <div class="tab" data-tab="leads">Saved Leads</div>
+            <div class="tab" data-tab="add">Add Lead</div>
             <div class="tab" data-tab="route">Route Planner</div>
         </div>
 
@@ -163,6 +165,7 @@ https://facebook.com/business3
                 <div style="display:flex; gap:16px; margin-bottom:16px; font-size:0.85rem;">
                     <span style="color:#4ade80" id="bulk-found">Found: 0</span>
                     <span style="color:#fbbf24" id="bulk-notfound">Not found: 0</span>
+                    <span style="color:#f87171" id="bulk-duplicates">Duplicates: 0</span>
                     <span style="color:#94a3b8" id="bulk-skipped">Skipped: 0</span>
                 </div>
             </div>
@@ -183,9 +186,69 @@ https://facebook.com/business3
             <div style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
                 <button class="btn btn-sm btn-ghost" onclick="classifyZones()" id="classify-btn">Classify Zones</button>
                 <button class="btn btn-sm btn-ghost" onclick="fetchAllFollowers()" id="followers-btn">Fetch Followers (TikTok)</button>
+                <button class="btn btn-sm btn-ghost" onclick="fixTiktokNames()" id="fix-names-btn">Fix TikTok Names</button>
                 <span class="helper">~1 sec per lead each</span>
+                <select class="status-select" id="sort-select" onchange="loadLeads()" style="margin-left:auto;">
+                    <option value="newest">Newest first</option>
+                    <option value="followers">Most followers</option>
+                </select>
             </div>
             <div id="leads-list"></div>
+        </div>
+
+        <!-- Add Lead Tab -->
+        <div class="tab-content" id="tab-add">
+            <div class="search-box">
+                <div class="input-group">
+                    <label>Business Name *</label>
+                    <input type="text" id="add-name" placeholder="e.g. Motorepuestos Veneplaza">
+                </div>
+                <div style="display:flex; gap:12px;">
+                    <div class="input-group" style="flex:1;">
+                        <label>Platform</label>
+                        <select id="add-platform" class="status-select" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#f8fafc;font-size:1rem;">
+                            <option value="tiktok">TikTok</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="facebook">Facebook</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>Status</label>
+                        <select id="add-status" class="status-select" style="width:100%;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#f8fafc;font-size:1rem;">
+                            <option value="to_visit">To Visit</option>
+                            <option value="to_message">To Message</option>
+                            <option value="new">New</option>
+                            <option value="contacted">Contacted</option>
+                            <option value="client">Client</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Profile URL</label>
+                    <input type="text" id="add-profile" placeholder="https://tiktok.com/@handle">
+                </div>
+                <div class="input-group">
+                    <label>Google Maps Link</label>
+                    <input type="text" id="add-maps" placeholder="https://maps.google.com/...">
+                </div>
+                <div style="display:flex; gap:12px;">
+                    <div class="input-group" style="flex:1;">
+                        <label>Followers</label>
+                        <input type="text" id="add-followers" placeholder="e.g. 89.2K, 1.5M, 5000">
+                    </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>Phone</label>
+                        <input type="text" id="add-phone" placeholder="Phone number">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Notes</label>
+                    <input type="text" id="add-notes" placeholder="Any notes about this lead">
+                </div>
+                <button class="btn btn-primary" id="add-lead-btn" onclick="addManualLead()">Add Lead</button>
+                <div id="add-result" style="margin-top:12px;"></div>
+            </div>
         </div>
 
         <!-- Route Planner Tab -->
@@ -330,6 +393,17 @@ function renderResult(data) {
 async function saveLead(e, data, status) {
     data.status = status;
     try {
+        const dupeResp = await fetch('/api/check-duplicate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const dupeData = await dupeResp.json();
+        if (dupeData.duplicates && dupeData.duplicates.length > 0) {
+            const d = dupeData.duplicates[0];
+            const action = confirm(`Duplicate found!\n\n"${d.business_name || d.handle}" already exists (status: ${d.status}).\n\nClick OK to save anyway, or Cancel to skip.`);
+            if (!action) { return; }
+        }
         await fetch('/api/leads', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -340,6 +414,77 @@ async function saveLead(e, data, status) {
     } catch (err) {
         alert('Error saving: ' + err.message);
     }
+}
+
+// --- Manual Add Lead ---
+async function addManualLead() {
+    const name = document.getElementById('add-name').value.trim();
+    if (!name) { alert('Business name is required'); return; }
+
+    const platform = document.getElementById('add-platform').value;
+    const status = document.getElementById('add-status').value;
+    const profileUrl = document.getElementById('add-profile').value.trim();
+    const mapsUrl = document.getElementById('add-maps').value.trim();
+    const followersRaw = document.getElementById('add-followers').value.trim();
+    const phone = document.getElementById('add-phone').value.trim();
+    const notes = document.getElementById('add-notes').value.trim();
+
+    // Extract handle from profile URL if possible
+    let handle = name.toLowerCase().replace(/\s+/g, '');
+    if (profileUrl) {
+        const handleMatch = profileUrl.match(/(?:tiktok|instagram|facebook)\.com\/@?([^/?#]+)/i);
+        if (handleMatch) handle = handleMatch[1].toLowerCase();
+    }
+
+    const followers = followersRaw ? parseFollowerInput(followersRaw) : null;
+    if (followersRaw && followers === null) { alert('Invalid follower count (e.g. 89.2K, 1.5M, 5000)'); return; }
+
+    const data = {
+        business_name: name,
+        platform: platform,
+        handle: handle,
+        profile_url: profileUrl,
+        maps_url: mapsUrl,
+        followers: followers,
+        phone: phone,
+        notes: notes,
+        status: status,
+    };
+
+    const btn = document.getElementById('add-lead-btn');
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+
+    try {
+        const dupeResp = await fetch('/api/check-duplicate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const dupeData = await dupeResp.json();
+        if (dupeData.duplicates && dupeData.duplicates.length > 0) {
+            const d = dupeData.duplicates[0];
+            const action = confirm(`Duplicate found!\n\n"${d.business_name || d.handle}" already exists (status: ${d.status}).\n\nClick OK to save anyway, or Cancel to skip.`);
+            if (!action) { btn.disabled = false; btn.textContent = 'Add Lead'; return; }
+        }
+        btn.textContent = 'Saving...';
+        await fetch('/api/leads', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        document.getElementById('add-result').innerHTML = '<span style="color:#4ade80;">Saved! You can add another.</span>';
+        document.getElementById('add-name').value = '';
+        document.getElementById('add-profile').value = '';
+        document.getElementById('add-maps').value = '';
+        document.getElementById('add-followers').value = '';
+        document.getElementById('add-phone').value = '';
+        document.getElementById('add-notes').value = '';
+    } catch (err) {
+        document.getElementById('add-result').innerHTML = `<span style="color:#ef4444;">Error: ${err.message}</span>`;
+    }
+    btn.disabled = false;
+    btn.textContent = 'Add Lead';
 }
 
 // --- Bulk Upload ---
@@ -357,7 +502,7 @@ async function startBulk() {
     document.getElementById('bulk-progress').style.display = 'block';
     document.getElementById('bulk-results').innerHTML = '';
 
-    let found = 0, notfound = 0, skipped = 0;
+    let found = 0, notfound = 0, skipped = 0, duplicates = 0;
     for (let i = 0; i < urls.length; i++) {
         if (!bulkRunning) break;
         const pct = Math.round(((i + 1) / urls.length) * 100);
@@ -371,7 +516,10 @@ async function startBulk() {
                 body: JSON.stringify({url: urls[i], auto_save: true})
             });
             const data = await resp.json();
-            if (data.skipped) {
+            if (data.duplicate) {
+                duplicates++;
+                appendBulkResult('duplicate', data.existing_name || data.handle, data.reason);
+            } else if (data.skipped) {
                 skipped++;
                 appendBulkResult('skipped', urls[i], 'Could not parse URL');
             } else if (data.found) {
@@ -387,6 +535,7 @@ async function startBulk() {
         }
         document.getElementById('bulk-found').textContent = 'Found: ' + found;
         document.getElementById('bulk-notfound').textContent = 'Not found: ' + notfound;
+        document.getElementById('bulk-duplicates').textContent = 'Duplicates: ' + duplicates;
         document.getElementById('bulk-skipped').textContent = 'Skipped: ' + skipped;
     }
 
@@ -401,9 +550,9 @@ function stopBulk() { bulkRunning = false; }
 
 function appendBulkResult(type, title, detail) {
     const container = document.getElementById('bulk-results');
-    const badgeClass = type === 'visit' ? 'badge-visit' : type === 'message' ? 'badge-message' : 'badge-skip';
-    const cardClass = type === 'visit' ? 'visit' : type === 'message' ? 'message' : 'skipped';
-    const label = type === 'visit' ? 'VISIT' : type === 'message' ? 'MESSAGE' : 'SKIP';
+    const badgeClass = type === 'visit' ? 'badge-visit' : type === 'message' ? 'badge-message' : type === 'duplicate' ? 'badge-duplicate' : 'badge-skip';
+    const cardClass = type === 'visit' ? 'visit' : type === 'message' ? 'message' : type === 'duplicate' ? 'skipped' : 'skipped';
+    const label = type === 'visit' ? 'VISIT' : type === 'message' ? 'MESSAGE' : type === 'duplicate' ? 'DUPLICATE' : 'SKIP';
     container.innerHTML += `
         <div class="result-card ${cardClass}" style="padding:12px 16px; margin-bottom:6px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -431,6 +580,10 @@ async function loadLeads() {
     try {
         const resp = await fetch(url);
         const leads = await resp.json();
+        const sort = document.getElementById('sort-select').value;
+        if (sort === 'followers') {
+            leads.sort((a, b) => (b.followers || 0) - (a.followers || 0));
+        }
         renderLeads(leads);
     } catch (err) {
         document.getElementById('leads-list').innerHTML = `<div class="no-result">Error loading leads</div>`;
@@ -453,15 +606,16 @@ function renderLeads(leads) {
                     <span>${esc(lead.business_name || lead.handle)}</span>
                     <button class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:0.7rem;" onclick="editName(${lead.id}, '${esc(lead.business_name || lead.handle).replace(/'/g, "\\'")}')">edit</button>
                     ${lead.zone ? `<span class="badge badge-zone">${esc(lead.zone)}</span>` : ''}
-                    ${followersDisplay ? `<span class="badge badge-followers">${followersDisplay}</span>` : `<button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="editFollowers(${lead.id})">+ followers</button>`}
+                    ${followersDisplay ? `<span class="badge badge-followers" style="cursor:pointer;" onclick="editFollowers(${lead.id}, ${lead.followers})" title="Click to edit">${followersDisplay}</span>` : `<button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="editFollowers(${lead.id}, 0)">+ followers</button>`}
                 </div>
                 <div class="lead-meta">
                     @${esc(lead.handle)} on ${esc(lead.platform)}
                     ${lead.address ? ` &middot; ${esc(lead.address)}` : ''}
                     ${lead.maps_url
-                        ? ` &middot; <a href="${lead.maps_url}" target="_blank">Maps</a> <button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="editMapsUrl(${lead.id})">edit</button><button class="btn btn-sm btn-danger" style="padding:1px 5px;font-size:0.65rem;margin-left:2px;" onclick="removeMapsUrl(${lead.id})">x</button>`
+                        ? ` &middot; <a href="${lead.maps_url}" target="_blank">Maps</a> <button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="editMapsUrl(${lead.id})">edit</button><button class="btn btn-sm btn-danger" style="padding:1px 5px;font-size:0.65rem;margin-left:2px;" onclick="removeMapsUrl(event, ${lead.id})">x</button>`
                         : ` &middot; <button class="btn btn-sm btn-save" style="padding:2px 8px;font-size:0.7rem;" onclick="editMapsUrl(${lead.id})">+ Maps</button>`
                     }
+                    &middot; <button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="reSearch(${lead.id}, this)" id="re-search-${lead.id}">re-search</button>
                     ${lead.profile_url ? ` &middot; <a href="${lead.profile_url}" target="_blank">Profile</a>` : ''}
                     ${lead.phone ? ` &middot; ${esc(lead.phone)}` : ''}
                 </div>
@@ -512,11 +666,14 @@ async function toggleReviewed(id, checked) {
     loadLeads();
 }
 
-async function removeMapsUrl(id) {
+async function removeMapsUrl(e, id) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!confirm('Remove Maps link and location data?')) return;
     await fetch(`/api/leads/${id}`, {
         method: 'PATCH',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({maps_url: '', lat: null, lng: null, zone: ''})
+        body: JSON.stringify({maps_url: '', address: '', lat: null, lng: null, zone: '', status: 'to_message'})
     });
     loadLeads();
 }
@@ -535,13 +692,43 @@ async function editMapsUrl(id) {
     loadLeads();
 }
 
-async function editFollowers(id) {
-    const count = prompt('Enter follower count (number):');
+async function editFollowers(id, current) {
+    const def = current ? formatFollowers(current) : '';
+    const count = prompt('Enter follower count (e.g. 89.2K, 1.5M, 5000):', def);
     if (count === null) return;
-    const num = parseInt(count.replace(/[,.\s]/g, ''), 10);
-    if (isNaN(num)) { alert('Enter a valid number'); return; }
+    const num = parseFollowerInput(count);
+    if (num === null) { alert('Enter a valid number (e.g. 89.2K, 1.5M, 5000)'); return; }
     await updateLead(id, 'followers', num);
     loadLeads();
+}
+
+function parseFollowerInput(str) {
+    str = str.trim().replace(/[,\s]/g, '');
+    if (!str) return null;
+    const match = str.match(/^(\d+\.?\d*)\s*([kKmM]?)$/);
+    if (!match) return null;
+    let num = parseFloat(match[1]);
+    const suffix = match[2].toLowerCase();
+    if (suffix === 'k') num *= 1000;
+    else if (suffix === 'm') num *= 1000000;
+    return Math.round(num);
+}
+
+async function reSearch(id, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    try {
+        const resp = await fetch(`/api/re-search/${id}`, {method: 'POST'});
+        const data = await resp.json();
+        if (data.found) {
+            btn.textContent = 'found!';
+        } else {
+            btn.textContent = 'not found';
+        }
+        loadLeads();
+    } catch (err) {
+        btn.textContent = 'error';
+    }
 }
 
 async function addNote(id) {
@@ -583,6 +770,22 @@ async function fetchAllFollowers() {
         btn.textContent = `Done! ${data.fetched} fetched, ${data.failed} failed`;
         loadLeads();
         setTimeout(() => { btn.textContent = 'Fetch Followers (TikTok)'; btn.disabled = false; }, 3000);
+    } catch (err) {
+        btn.textContent = 'Error';
+        btn.disabled = false;
+    }
+}
+
+async function fixTiktokNames() {
+    const btn = document.getElementById('fix-names-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Fixing names + re-searching Maps...';
+    try {
+        const resp = await fetch('/api/fix-tiktok-names', {method: 'POST'});
+        const data = await resp.json();
+        btn.textContent = `Done! ${data.fixed} fixed, ${data.skipped} already done`;
+        loadLeads();
+        setTimeout(() => { btn.textContent = 'Fix TikTok Names'; btn.disabled = false; }, 3000);
     } catch (err) {
         btn.textContent = 'Error';
         btn.disabled = false;
