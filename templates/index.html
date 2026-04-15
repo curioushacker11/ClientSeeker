@@ -1621,7 +1621,7 @@ function selectTripZone(btn, zone) {
 
 async function loadMapLeads() {
     try {
-        const resp = await fetch('/api/leads?status=to_visit');
+        const resp = await fetch('/api/leads?status=to_visit&priority=1');
         const leads = await resp.json();
         tripsLeadCache = {};
         leads.forEach(l => { tripsLeadCache[l.id] = l; });
