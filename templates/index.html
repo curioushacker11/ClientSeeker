@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ClientSeeker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
@@ -125,6 +127,29 @@
             .lead-header { flex-wrap: wrap; }
             .route-stats { flex-direction: column; gap: 12px; }
         }
+
+        #trips-map { height: 480px; width: 100%; border-radius: 8px; overflow: hidden; background: #0f172a; border: 1px solid #334155; }
+        #trips-map .leaflet-container { background: #0f172a; }
+        .leaflet-popup-content-wrapper { background: #1e293b; color: #e2e8f0; border-radius: 8px; }
+        .leaflet-popup-tip { background: #1e293b; }
+        .leaflet-popup-content { margin: 10px 14px; font-size: 0.85rem; }
+        .leaflet-popup-content a { color: #38bdf8; text-decoration: none; }
+        .leaflet-popup-content .popup-name { font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
+        .leaflet-popup-content .popup-meta { font-size: 0.75rem; color: #94a3b8; margin-bottom: 6px; }
+        .leaflet-popup-content .popup-toggle { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: none; }
+        .leaflet-popup-content .popup-toggle.add { background: #22c55e; color: #fff; }
+        .leaflet-popup-content .popup-toggle.remove { background: #ef4444; color: #fff; }
+
+        .trip-list-item { background: #1e293b; border-radius: 10px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .trip-list-item.active { border: 1px solid #38bdf8; }
+        .trip-list-info { flex: 1; min-width: 180px; }
+        .trip-list-name { font-weight: 600; color: #f8fafc; }
+        .trip-list-meta { font-size: 0.8rem; color: #94a3b8; margin-top: 2px; }
+        .trip-list-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+        @media (max-width: 600px) {
+            #trips-map { height: 360px; }
+        }
     </style>
 </head>
 <body>
@@ -139,6 +164,7 @@
             <div class="tab" data-tab="tovisit">To Visit</div>
             <div class="tab" data-tab="add">Add Lead</div>
             <div class="tab" data-tab="route">Route Planner</div>
+            <div class="tab" data-tab="trips">Trips</div>
         </div>
 
         {% if not scraper_ok %}
@@ -338,6 +364,48 @@ https://facebook.com/business3
             </div>
             <div id="route-results"></div>
         </div>
+
+        <!-- Trips Tab -->
+        <div class="tab-content" id="tab-trips">
+            <div class="search-box">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                    <strong id="trip-mode-label" style="color:#f8fafc;">New Trip</strong>
+                    <div style="font-size:0.85rem; color:#94a3b8;"><span id="trips-selected-count">0</span> selected</div>
+                </div>
+                <div class="info-box" style="padding:10px 14px; margin-bottom:14px;">
+                    Click pins on the map to include or exclude leads. Pins are colored by zone; selected pins turn green.
+                </div>
+                <div class="input-group">
+                    <label>Filter map by zone</label>
+                    <div class="zone-selector" id="trips-zone-selector">
+                        <button class="filter-btn active" data-zone="" onclick="selectTripZone(this, '')">All Zones</button>
+                    </div>
+                </div>
+                <div id="trips-map"></div>
+                <div id="trips-unmapped" class="helper" style="margin-top:8px;"></div>
+                <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+                    <button class="btn btn-ghost btn-sm" onclick="selectAllVisible()">Select All Visible</button>
+                    <button class="btn btn-ghost btn-sm" onclick="clearTripSelection()">Clear Selection</button>
+                </div>
+                <div class="input-group" style="margin-top:16px;">
+                    <label>Trip Name</label>
+                    <input type="text" id="trip-name" placeholder="e.g. Alajuela Monday">
+                </div>
+                <div class="input-group">
+                    <label>Starting Location (optional)</label>
+                    <input type="text" id="trip-start" placeholder="e.g. San Jose, Costa Rica or 9.9281,-84.0907">
+                </div>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="trip-save-btn" onclick="saveTrip()">Save Trip</button>
+                    <button class="btn btn-ghost btn-sm" id="trip-new-btn" onclick="newTrip()" style="display:none;">New Trip</button>
+                    <button class="btn btn-primary btn-sm" id="trip-optimize-btn" onclick="optimizeCurrentTrip()" style="display:none;">Optimize Route</button>
+                    <span id="trip-save-status" style="font-size:0.85rem; color:#64748b;"></span>
+                </div>
+            </div>
+            <div id="trip-route-results"></div>
+            <h3 style="color:#f8fafc; margin:24px 0 12px; font-size:1.1rem;">Saved Trips</h3>
+            <div id="trips-list"></div>
+        </div>
     </div>
 
 <script>
@@ -351,6 +419,7 @@ function switchTab(tabName) {
     if (tabName === 'leads') loadLeads();
     if (tabName === 'tovisit') loadToVisit();
     if (tabName === 'route') loadZones();
+    if (tabName === 'trips') openTripsTab();
 }
 
 document.querySelectorAll('.tab').forEach(tab => {
@@ -1487,6 +1556,342 @@ function renderRoute(data, startLat, startLng, startName) {
 
     container.innerHTML = `
         <div class="route-summary">
+            <div class="route-stats">
+                <div class="route-stat"><div class="label">Stops</div><div class="value">${data.ordered_leads.length}</div></div>
+                <div class="route-stat"><div class="label">Total Distance</div><div class="value">${data.total_distance_km} km</div></div>
+                <div class="route-stat"><div class="label">Drive Time</div><div class="value">${data.total_duration_min} min</div></div>
+            </div>
+            <a href="${esc(data.google_maps_url)}" target="_blank" class="btn btn-primary" style="display:inline-block; text-decoration:none; margin-bottom:16px;">Open Route in Google Maps</a>
+            <div>${stopsHtml}</div>
+        </div>`;
+}
+
+// --- Trips ---
+let tripsMap = null;
+let tripsMarkers = {};
+let tripsLeadCache = {};
+let tripsSelected = new Set();
+let tripsZoneFilter = '';
+let currentTripId = null;
+let tripsMapFitted = false;
+
+const ZONE_COLORS = {
+    'Central': '#a78bfa',
+    'Pérez Zeledón': '#38bdf8',
+    'Perez Zeledón': '#38bdf8',
+    'Unclassified': '#64748b',
+    '': '#64748b',
+};
+function zoneColor(z) { return ZONE_COLORS[z] || '#64748b'; }
+
+async function openTripsTab() {
+    if (!tripsMap) initTripsMap();
+    else setTimeout(() => tripsMap.invalidateSize(), 50);
+    await Promise.all([loadTripsZones(), loadMapLeads(), loadTripsList()]);
+}
+
+function initTripsMap() {
+    tripsMap = L.map('trips-map', { center: [9.9, -84.0], zoom: 9, scrollWheelZoom: true });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19,
+    }).addTo(tripsMap);
+    setTimeout(() => tripsMap.invalidateSize(), 100);
+}
+
+async function loadTripsZones() {
+    try {
+        const resp = await fetch('/api/zones');
+        const zones = await resp.json();
+        const c = document.getElementById('trips-zone-selector');
+        c.innerHTML = `<button class="filter-btn${!tripsZoneFilter ? ' active' : ''}" data-zone="" onclick="selectTripZone(this, '')">All Zones</button>`;
+        zones.forEach(z => {
+            c.innerHTML += `<button class="filter-btn${tripsZoneFilter===z ? ' active' : ''}" data-zone="${esc(z)}" onclick="selectTripZone(this, '${esc(z)}')">${esc(z)}</button>`;
+        });
+    } catch {}
+}
+
+function selectTripZone(btn, zone) {
+    document.querySelectorAll('#trips-zone-selector .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    tripsZoneFilter = zone;
+    renderTripMarkers();
+}
+
+async function loadMapLeads() {
+    try {
+        const resp = await fetch('/api/leads?status=to_visit');
+        const leads = await resp.json();
+        tripsLeadCache = {};
+        leads.forEach(l => { tripsLeadCache[l.id] = l; });
+        renderTripMarkers();
+    } catch {}
+}
+
+function renderTripMarkers() {
+    if (!tripsMap) return;
+    Object.values(tripsMarkers).forEach(m => tripsMap.removeLayer(m));
+    tripsMarkers = {};
+
+    const all = Object.values(tripsLeadCache);
+    const visible = all.filter(l => l.lat != null && l.lng != null &&
+        (!tripsZoneFilter || l.zone === tripsZoneFilter));
+    const unmapped = all.filter(l => l.lat == null || l.lng == null).length;
+
+    document.getElementById('trips-unmapped').textContent = unmapped
+        ? `${unmapped} "To Visit" lead(s) have no coordinates — not shown on map.`
+        : '';
+
+    const bounds = [];
+    visible.forEach(lead => {
+        const selected = tripsSelected.has(lead.id);
+        const marker = L.circleMarker([lead.lat, lead.lng], {
+            radius: selected ? 10 : 6,
+            color: selected ? '#22c55e' : zoneColor(lead.zone),
+            weight: selected ? 3 : 1,
+            fillColor: selected ? '#4ade80' : zoneColor(lead.zone),
+            fillOpacity: selected ? 0.9 : 0.65,
+        });
+        marker.bindPopup(buildPopup(lead));
+        marker.addTo(tripsMap);
+        tripsMarkers[lead.id] = marker;
+        bounds.push([lead.lat, lead.lng]);
+    });
+
+    if (bounds.length && !tripsMapFitted) {
+        tripsMap.fitBounds(bounds, { padding: [30, 30] });
+        tripsMapFitted = true;
+    }
+    updateSelectedCount();
+}
+
+function buildPopup(lead) {
+    const selected = tripsSelected.has(lead.id);
+    const btnClass = selected ? 'remove' : 'add';
+    const btnLabel = selected ? 'Remove from Trip' : 'Add to Trip';
+    const zone = lead.zone ? `<span style="color:${zoneColor(lead.zone)}">${esc(lead.zone)}</span>` : '';
+    const maps = lead.maps_url ? ` · <a href="${esc(lead.maps_url)}" target="_blank">Maps</a>` : '';
+    return `
+        <div class="popup-name">${esc(lead.business_name || lead.handle)}</div>
+        <div class="popup-meta">${esc(lead.address || '')}</div>
+        <div class="popup-meta">${zone}${maps}</div>
+        <button class="popup-toggle ${btnClass}" onclick="toggleTripLead(${lead.id})">${btnLabel}</button>
+    `;
+}
+
+function toggleTripLead(leadId) {
+    if (tripsSelected.has(leadId)) tripsSelected.delete(leadId);
+    else tripsSelected.add(leadId);
+    renderTripMarkers();
+    const m = tripsMarkers[leadId];
+    if (m) m.openPopup();
+}
+
+function updateSelectedCount() {
+    document.getElementById('trips-selected-count').textContent = tripsSelected.size;
+}
+
+function selectAllVisible() {
+    Object.values(tripsLeadCache).forEach(l => {
+        if (l.lat != null && l.lng != null &&
+            (!tripsZoneFilter || l.zone === tripsZoneFilter)) {
+            tripsSelected.add(l.id);
+        }
+    });
+    renderTripMarkers();
+}
+
+function clearTripSelection() {
+    tripsSelected.clear();
+    renderTripMarkers();
+}
+
+function newTrip() {
+    currentTripId = null;
+    tripsSelected.clear();
+    document.getElementById('trip-name').value = '';
+    document.getElementById('trip-start').value = '';
+    document.getElementById('trip-mode-label').textContent = 'New Trip';
+    document.getElementById('trip-save-btn').textContent = 'Save Trip';
+    document.getElementById('trip-new-btn').style.display = 'none';
+    document.getElementById('trip-optimize-btn').style.display = 'none';
+    document.getElementById('trip-save-status').textContent = '';
+    document.getElementById('trip-route-results').innerHTML = '';
+    renderTripMarkers();
+    loadTripsList();
+}
+
+async function resolveStartCoords(input) {
+    const s = (input || '').trim();
+    if (!s) return { lat: null, lng: null, label: '' };
+    const m = s.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]), label: s };
+    try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(s)}&limit=1`);
+        const data = await r.json();
+        if (data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: s };
+    } catch {}
+    return { lat: null, lng: null, label: s };
+}
+
+async function saveTrip() {
+    const name = document.getElementById('trip-name').value.trim();
+    if (!name) { alert('Trip name required'); return; }
+    if (!tripsSelected.size) { alert('Select at least one lead on the map'); return; }
+
+    const btn = document.getElementById('trip-save-btn');
+    const labelBefore = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Saving...';
+
+    const start = await resolveStartCoords(document.getElementById('trip-start').value);
+    const body = {
+        name,
+        lead_ids: [...tripsSelected],
+        start_lat: start.lat,
+        start_lng: start.lng,
+        start_label: start.label,
+    };
+
+    try {
+        const url = currentTripId ? `/api/trips/${currentTripId}` : '/api/trips';
+        const method = currentTripId ? 'PATCH' : 'POST';
+        const resp = await fetch(url, {
+            method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Save failed');
+        if (!currentTripId) currentTripId = data.id;
+        document.getElementById('trip-save-status').textContent = 'Saved.';
+        document.getElementById('trip-mode-label').textContent = `Editing: ${name}`;
+        document.getElementById('trip-save-btn').textContent = 'Update Trip';
+        document.getElementById('trip-new-btn').style.display = '';
+        document.getElementById('trip-optimize-btn').style.display = '';
+        loadTripsList();
+    } catch (err) {
+        document.getElementById('trip-save-status').textContent = `Error: ${err.message}`;
+    } finally {
+        btn.disabled = false;
+        if (btn.innerHTML.includes('Saving')) btn.textContent = labelBefore;
+        setTimeout(() => { document.getElementById('trip-save-status').textContent = ''; }, 3000);
+    }
+}
+
+async function loadTripsList() {
+    try {
+        const resp = await fetch('/api/trips');
+        const trips = await resp.json();
+        const c = document.getElementById('trips-list');
+        if (!trips.length) {
+            c.innerHTML = '<div class="no-result" style="padding:20px;">No saved trips yet.</div>';
+            return;
+        }
+        c.innerHTML = trips.map(t => {
+            const active = t.id === currentTripId ? ' active' : '';
+            const startInfo = t.start_label ? ` · starts at ${esc(t.start_label)}` : '';
+            return `
+                <div class="trip-list-item${active}">
+                    <div class="trip-list-info">
+                        <div class="trip-list-name">${esc(t.name)}</div>
+                        <div class="trip-list-meta">${t.lead_count} lead(s)${startInfo}</div>
+                    </div>
+                    <div class="trip-list-actions">
+                        <button class="btn btn-ghost btn-sm" onclick="loadTrip(${t.id})">Load</button>
+                        <button class="btn btn-primary btn-sm" onclick="optimizeTrip(${t.id})">Optimize</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteTrip(${t.id})">Delete</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch {}
+}
+
+async function loadTrip(tripId) {
+    try {
+        const resp = await fetch(`/api/trips/${tripId}`);
+        const trip = await resp.json();
+        if (!resp.ok) { alert(trip.error || 'Failed to load'); return; }
+        currentTripId = tripId;
+        trip.leads.forEach(l => { tripsLeadCache[l.id] = l; });
+        tripsSelected = new Set(trip.leads.map(l => l.id));
+        document.getElementById('trip-name').value = trip.name;
+        document.getElementById('trip-start').value = trip.start_label || '';
+        document.getElementById('trip-mode-label').textContent = `Editing: ${trip.name}`;
+        document.getElementById('trip-save-btn').textContent = 'Update Trip';
+        document.getElementById('trip-new-btn').style.display = '';
+        document.getElementById('trip-optimize-btn').style.display = '';
+        document.getElementById('trip-route-results').innerHTML = '';
+        renderTripMarkers();
+        const coords = trip.leads.filter(l => l.lat != null && l.lng != null).map(l => [l.lat, l.lng]);
+        if (coords.length && tripsMap) tripsMap.fitBounds(coords, { padding: [40, 40] });
+        loadTripsList();
+        document.getElementById('trips-map').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+        alert('Error loading trip: ' + err.message);
+    }
+}
+
+async function deleteTrip(tripId) {
+    if (!confirm('Delete this trip? The leads themselves are not deleted.')) return;
+    try {
+        await fetch(`/api/trips/${tripId}`, { method: 'DELETE' });
+        if (currentTripId === tripId) newTrip();
+        loadTripsList();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function optimizeTrip(tripId) {
+    const container = document.getElementById('trip-route-results');
+    container.innerHTML = '<div class="no-result"><span class="spinner"></span>Optimizing...</div>';
+    try {
+        const resp = await fetch(`/api/trips/${tripId}/optimize`, { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) {
+            container.innerHTML = `<div class="no-result">${esc(data.error)}</div>`;
+            return;
+        }
+        const tripResp = await fetch(`/api/trips/${tripId}`);
+        const trip = await tripResp.json();
+        renderTripRoute(data, trip);
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+        container.innerHTML = `<div class="no-result">Error: ${esc(err.message)}</div>`;
+    }
+}
+
+function optimizeCurrentTrip() {
+    if (!currentTripId) { alert('Save the trip first'); return; }
+    optimizeTrip(currentTripId);
+}
+
+function renderTripRoute(data, trip) {
+    const container = document.getElementById('trip-route-results');
+    let stopsHtml = '';
+    if (trip.start_lat != null) {
+        stopsHtml += `
+            <div class="route-stop">
+                <div class="stop-number">S</div>
+                <div class="stop-info"><div class="stop-name">Start: ${esc(trip.start_label || '')}</div><div class="stop-addr">${trip.start_lat}, ${trip.start_lng}</div></div>
+            </div>`;
+    }
+    data.ordered_leads.forEach((lead, i) => {
+        stopsHtml += `
+            <div class="route-stop">
+                <div class="stop-number">${i + 1}</div>
+                <div class="stop-info">
+                    <div class="stop-name">${esc(lead.business_name || lead.handle)}</div>
+                    <div class="stop-addr">${esc(lead.address || '')} ${lead.phone ? '| ' + esc(lead.phone) : ''}</div>
+                </div>
+            </div>`;
+    });
+    container.innerHTML = `
+        <div class="route-summary">
+            <div style="font-weight:600; color:#f8fafc; margin-bottom:12px;">Route: ${esc(trip.name)}</div>
             <div class="route-stats">
                 <div class="route-stat"><div class="label">Stops</div><div class="value">${data.ordered_leads.length}</div></div>
                 <div class="route-stat"><div class="label">Total Distance</div><div class="value">${data.total_distance_km} km</div></div>
