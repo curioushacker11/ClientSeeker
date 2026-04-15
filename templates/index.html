@@ -36,6 +36,8 @@
         .btn-danger:hover { background: #f87171; }
         .btn-ghost { background: transparent; border: 1px solid #334155; color: #94a3b8; }
         .btn-ghost:hover { border-color: #64748b; color: #e2e8f0; }
+        .btn-tovisit { background: rgba(34,197,94,0.15); border: 1px solid #22c55e; color: #4ade80; padding: 4px 10px; font-size: 0.75rem; border-radius: 6px; }
+        .btn-tovisit:hover { background: rgba(34,197,94,0.25); }
         .helper { font-size: 0.8rem; color: #64748b; margin-top: 6px; }
 
         .result-card { background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 16px; border-left: 4px solid transparent; }
@@ -49,6 +51,7 @@
         .badge-skip { background: rgba(100,116,139,0.15); color: #94a3b8; }
         .badge-zone { background: rgba(139,92,246,0.15); color: #a78bfa; font-size: 0.7rem; padding: 2px 8px; margin-left: 6px; }
         .badge-followers { background: rgba(56,189,248,0.15); color: #7dd3fc; font-size: 0.7rem; padding: 2px 8px; margin-left: 6px; }
+        .badge-email { background: rgba(34,197,94,0.15); color: #4ade80; font-size: 0.7rem; padding: 2px 8px; margin-left: 6px; }
         .badge-duplicate { background: rgba(239,68,68,0.15); color: #f87171; }
 
         .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -68,8 +71,10 @@
         .filter-btn:hover { border-color: #64748b; }
         .filter-btn.active { background: #38bdf8; color: #0f172a; border-color: #38bdf8; }
 
-        .lead-card { background: #1e293b; border-radius: 10px; padding: 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-        .lead-card.reviewed { }
+        .lead-card { background: #1e293b; border-radius: 10px; margin-bottom: 6px; overflow: hidden; }
+        .lead-header { padding: 14px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: background 0.15s; }
+        .lead-header:hover { background: #253348; }
+        .lead-card.expanded .lead-header { background: #253348; border-bottom: 1px solid #334155; }
         .lead-checkbox { width: 20px; height: 20px; accent-color: #22c55e; cursor: pointer; flex-shrink: 0; }
         .lead-info { flex: 1; min-width: 0; }
         .lead-name { font-weight: 600; color: #f8fafc; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
@@ -77,6 +82,21 @@
         .lead-meta a { color: #38bdf8; text-decoration: none; }
         .lead-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
         .status-select { padding: 6px 10px; border-radius: 6px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; font-size: 0.8rem; }
+        .lead-detail { display: none; padding: 16px 20px; border-top: 1px solid #334155; background: #1a2536; }
+        .lead-card.expanded .lead-detail { display: block; }
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+        .detail-field label { display: block; font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .detail-field input, .detail-field textarea, .detail-field select { width: 100%; padding: 8px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #f8fafc; font-size: 0.9rem; font-family: inherit; outline: none; transition: border-color 0.2s; }
+        .detail-field input:focus, .detail-field textarea:focus { border-color: #38bdf8; }
+        .detail-field textarea { resize: vertical; min-height: 60px; }
+        .detail-field.full { grid-column: 1 / -1; }
+        .detail-links { display: flex; gap: 12px; margin-bottom: 12px; font-size: 0.85rem; }
+        .detail-links a { color: #38bdf8; text-decoration: none; }
+        .detail-links a:hover { text-decoration: underline; }
+        .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding-top: 12px; border-top: 1px solid #334155; }
+        @media (max-width: 600px) {
+            .detail-grid { grid-template-columns: 1fr; }
+        }
 
         .empty-state { text-align: center; padding: 60px 20px; color: #475569; }
         .empty-state p { margin-top: 8px; }
@@ -102,7 +122,7 @@
 
         @media (max-width: 600px) {
             .result-grid { grid-template-columns: 1fr; }
-            .lead-card { flex-direction: column; align-items: flex-start; }
+            .lead-header { flex-wrap: wrap; }
             .route-stats { flex-direction: column; gap: 12px; }
         }
     </style>
@@ -116,6 +136,7 @@
             <div class="tab active" data-tab="search">Search</div>
             <div class="tab" data-tab="bulk">Bulk Upload</div>
             <div class="tab" data-tab="leads">Saved Leads</div>
+            <div class="tab" data-tab="tovisit">To Visit</div>
             <div class="tab" data-tab="add">Add Lead</div>
             <div class="tab" data-tab="route">Route Planner</div>
         </div>
@@ -185,15 +206,61 @@ https://facebook.com/business3
             </div>
             <div style="margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
                 <button class="btn btn-sm btn-ghost" onclick="classifyZones()" id="classify-btn">Classify Zones</button>
-                <button class="btn btn-sm btn-ghost" onclick="fetchAllFollowers()" id="followers-btn">Fetch Followers (TikTok)</button>
+                <button class="btn btn-sm btn-ghost" onclick="startFollowerSearch()" id="followers-btn">Fetch Followers</button>
                 <button class="btn btn-sm btn-ghost" onclick="fixTiktokNames()" id="fix-names-btn">Fix TikTok Names</button>
+                <button class="btn btn-sm btn-ghost" onclick="startEmailSearch()" id="emails-btn" style="border-color:#22c55e;color:#4ade80;">Find Emails</button>
                 <span class="helper">~1 sec per lead each</span>
                 <select class="status-select" id="sort-select" onchange="loadLeads()" style="margin-left:auto;">
                     <option value="newest">Newest first</option>
                     <option value="followers">Most followers</option>
                 </select>
             </div>
+            <!-- Followers Progress -->
+            <div id="followers-progress" style="display:none; margin-bottom:16px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <div class="progress-text" id="followers-progress-text" style="margin:0;flex:1;">Fetching followers 0 / 0</div>
+                    <button class="btn btn-sm btn-ghost" id="followers-pause-btn" onclick="pauseFollowerSearch()" style="padding:4px 10px;">Pause</button>
+                    <button class="btn btn-sm btn-ghost" id="followers-resume-btn" onclick="resumeFollowerSearch()" style="padding:4px 10px;display:none;border-color:#38bdf8;color:#7dd3fc;">Resume</button>
+                    <button class="btn btn-sm btn-danger" id="followers-stop-btn" onclick="stopFollowerSearch()" style="padding:4px 10px;">Stop</button>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="followers-progress-fill" style="width:0%"></div></div>
+                <div style="display:flex; gap:16px; margin-bottom:8px; font-size:0.85rem;">
+                    <span style="color:#4ade80" id="followers-found">Found: 0</span>
+                    <span style="color:#f87171" id="followers-notfound">Failed: 0</span>
+                </div>
+                <div id="followers-current" style="font-size:0.8rem;color:#64748b;"></div>
+            </div>
+            <!-- Email Search Progress -->
+            <div id="email-progress" style="display:none; margin-bottom:16px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <div class="progress-text" id="email-progress-text" style="margin:0;flex:1;">Finding emails 0 / 0</div>
+                    <button class="btn btn-sm btn-ghost" id="email-pause-btn" onclick="pauseEmailSearch()" style="padding:4px 10px;">Pause</button>
+                    <button class="btn btn-sm btn-ghost" id="email-resume-btn" onclick="resumeEmailSearch()" style="padding:4px 10px;display:none;border-color:#22c55e;color:#4ade80;">Resume</button>
+                    <button class="btn btn-sm btn-danger" id="email-stop-btn" onclick="stopEmailSearch()" style="padding:4px 10px;">Stop</button>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="email-progress-fill" style="width:0%"></div></div>
+                <div style="display:flex; gap:16px; margin-bottom:8px; font-size:0.85rem;">
+                    <span style="color:#4ade80" id="email-found">Found: 0</span>
+                    <span style="color:#f87171" id="email-notfound">Not found: 0</span>
+                </div>
+                <div id="email-current" style="font-size:0.8rem;color:#64748b;"></div>
+            </div>
             <div id="leads-list"></div>
+        </div>
+
+        <!-- To Visit Tab -->
+        <div class="tab-content" id="tab-tovisit">
+            <div class="info-box" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <span>Leads approved for visiting. Use "→ Visit" button in Saved Leads to add more.</span>
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <select class="status-select" id="tovisit-sort" onchange="loadToVisit()">
+                        <option value="newest">Newest first</option>
+                        <option value="followers">Most followers</option>
+                    </select>
+                    <span id="tovisit-count" style="font-weight:600;"></span>
+                </div>
+            </div>
+            <div id="tovisit-list"></div>
         </div>
 
         <!-- Add Lead Tab -->
@@ -282,6 +349,7 @@ function switchTab(tabName) {
     document.getElementById('tab-' + tabName).classList.add('active');
     localStorage.setItem('activeTab', tabName);
     if (tabName === 'leads') loadLeads();
+    if (tabName === 'tovisit') loadToVisit();
     if (tabName === 'route') loadZones();
 }
 
@@ -596,42 +664,133 @@ function renderLeads(leads) {
         container.innerHTML = '<div class="empty-state"><p>No leads found.</p></div>';
         return;
     }
+    // Remember which leads were expanded
+    const expandedIds = new Set();
+    container.querySelectorAll('.lead-card.expanded').forEach(el => {
+        const m = el.id.match(/lead-(\d+)/);
+        if (m) expandedIds.add(m[1]);
+    });
+
     container.innerHTML = leads.map(lead => {
         const followersDisplay = lead.followers ? formatFollowers(lead.followers) : null;
+        const isExpanded = expandedIds.has(String(lead.id));
+        const statusColors = {new:'#94a3b8',to_visit:'#4ade80',to_message:'#fbbf24',contacted:'#38bdf8',client:'#a78bfa',skip:'#64748b'};
+        const statusColor = statusColors[lead.status] || '#94a3b8';
         return `
-        <div class="lead-card${lead.reviewed ? ' reviewed' : ''}" id="lead-${lead.id}">
-            <input type="checkbox" class="lead-checkbox" ${lead.reviewed ? 'checked' : ''} onchange="toggleReviewed(${lead.id}, this.checked)" title="Mark as reviewed">
-            <div class="lead-info">
-                <div class="lead-name">
-                    <span>${esc(lead.business_name || lead.handle)}</span>
-                    <button class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:0.7rem;" onclick="editName(${lead.id}, '${esc(lead.business_name || lead.handle).replace(/'/g, "\\'")}')">edit</button>
-                    ${lead.zone ? `<span class="badge badge-zone">${esc(lead.zone)}</span>` : ''}
-                    ${followersDisplay ? `<span class="badge badge-followers" style="cursor:pointer;" onclick="editFollowers(${lead.id}, ${lead.followers})" title="Click to edit">${followersDisplay}</span>` : `<button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="editFollowers(${lead.id}, 0)">+ followers</button>`}
+        <div class="lead-card${isExpanded ? ' expanded' : ''}" id="lead-${lead.id}">
+            <div class="lead-header" onclick="toggleLeadDetail(${lead.id})">
+                <input type="checkbox" class="lead-checkbox" ${lead.reviewed ? 'checked' : ''} onclick="event.stopPropagation();" onchange="toggleReviewed(${lead.id}, this.checked)" title="Mark as reviewed">
+                <div class="lead-info">
+                    <div class="lead-name">
+                        <span>${esc(lead.business_name || lead.handle)}</span>
+                        <span style="color:${statusColor};font-size:0.75rem;font-weight:400;margin-left:4px;">${lead.status.replace('_',' ')}</span>
+                        ${lead.zone ? `<span class="badge badge-zone">${esc(lead.zone)}</span>` : ''}
+                        ${followersDisplay ? `<span class="badge badge-followers">${followersDisplay}</span>` : ''}
+                        ${lead.email ? `<span class="badge badge-email">Email</span>` : ''}
+                        ${lead.maps_url ? `<span class="badge badge-zone">Maps</span>` : ''}
+                    </div>
+                    <div class="lead-meta">
+                        @${esc(lead.handle)} on ${esc(lead.platform)}
+                        ${lead.address ? ` &middot; ${esc(lead.address)}` : ''}
+                        ${lead.phone ? ` &middot; ${esc(lead.phone)}` : ''}
+                    </div>
                 </div>
-                <div class="lead-meta">
-                    @${esc(lead.handle)} on ${esc(lead.platform)}
-                    ${lead.address ? ` &middot; ${esc(lead.address)}` : ''}
-                    ${lead.maps_url
-                        ? ` &middot; <a href="${lead.maps_url}" target="_blank">Maps</a> <button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="editMapsUrl(${lead.id})">edit</button><button class="btn btn-sm btn-danger" style="padding:1px 5px;font-size:0.65rem;margin-left:2px;" onclick="removeMapsUrl(event, ${lead.id})">x</button>`
-                        : ` &middot; <button class="btn btn-sm btn-save" style="padding:2px 8px;font-size:0.7rem;" onclick="editMapsUrl(${lead.id})">+ Maps</button>`
-                    }
-                    &middot; <button class="btn btn-sm btn-ghost" style="padding:1px 5px;font-size:0.65rem;" onclick="reSearch(${lead.id}, this)" id="re-search-${lead.id}">re-search</button>
-                    ${lead.profile_url ? ` &middot; <a href="${lead.profile_url}" target="_blank">Profile</a>` : ''}
-                    ${lead.phone ? ` &middot; ${esc(lead.phone)}` : ''}
-                </div>
-                ${lead.notes ? `<div class="lead-meta" style="margin-top:4px;color:#64748b">Note: ${esc(lead.notes)}</div>` : ''}
+                ${!lead.priority ? `<button class="btn btn-tovisit" onclick="event.stopPropagation(); sendToVisit(${lead.id}, this)">\u2192 Visit</button>` : ''}
+                <span style="color:#475569;font-size:1.2rem;flex-shrink:0;">${isExpanded ? '\u25B2' : '\u25BC'}</span>
             </div>
-            <div class="lead-actions">
-                <select class="status-select" onchange="changeStatus(${lead.id}, this.value)">
-                    ${['new','to_visit','to_message','contacted','client','skip'].map(s =>
-                        `<option value="${s}" ${lead.status===s?'selected':''}>${s.replace('_',' ')}</option>`
-                    ).join('')}
-                </select>
-                <button class="btn btn-sm btn-ghost" onclick="addNote(${lead.id})">Note</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteLead(${lead.id})">X</button>
+            <div class="lead-detail">
+                <div class="detail-links">
+                    ${lead.profile_url ? `<a href="${esc(lead.profile_url)}" target="_blank">Open Profile</a>` : ''}
+                    ${lead.maps_url ? `<a href="${esc(lead.maps_url)}" target="_blank">Open in Maps</a>` : ''}
+                    ${lead.website ? `<a href="${esc(lead.website)}" target="_blank">Website</a>` : ''}
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-field">
+                        <label>Business Name</label>
+                        <input type="text" id="detail-name-${lead.id}" value="${esc(lead.business_name || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Status</label>
+                        <select id="detail-status-${lead.id}">
+                            ${['new','to_visit','to_message','contacted','client','skip'].map(s =>
+                                `<option value="${s}" ${lead.status===s?'selected':''}>${s.replace('_',' ')}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="detail-field">
+                        <label>Platform</label>
+                        <select id="detail-platform-${lead.id}">
+                            ${['tiktok','instagram','facebook','other'].map(p =>
+                                `<option value="${p}" ${lead.platform===p?'selected':''}>${p}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="detail-field">
+                        <label>Handle</label>
+                        <input type="text" id="detail-handle-${lead.id}" value="${esc(lead.handle || '')}" />
+                    </div>
+                    <div class="detail-field full">
+                        <label>Profile URL</label>
+                        <div style="display:flex;gap:8px;">
+                            <input type="text" id="detail-profile-${lead.id}" value="${esc(lead.profile_url || '')}" style="flex:1;" />
+                            <button class="btn btn-sm btn-ghost" onclick="openUrl('detail-profile-${lead.id}')" style="padding:8px 12px;">Open</button>
+                        </div>
+                    </div>
+                    <div class="detail-field full">
+                        <label>Google Maps Link</label>
+                        <div style="display:flex;gap:8px;">
+                            <input type="text" id="detail-maps-${lead.id}" value="${esc(lead.maps_url || '')}" style="flex:1;" />
+                            <button class="btn btn-sm btn-ghost" onclick="openUrl('detail-maps-${lead.id}')" style="padding:8px 12px;">Open</button>
+                        </div>
+                    </div>
+                    <div class="detail-field">
+                        <label>Address</label>
+                        <input type="text" id="detail-address-${lead.id}" value="${esc(lead.address || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Phone</label>
+                        <input type="text" id="detail-phone-${lead.id}" value="${esc(lead.phone || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Email</label>
+                        <input type="text" id="detail-email-${lead.id}" value="${esc(lead.email || '')}" placeholder="Enter email" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Followers</label>
+                        <input type="text" id="detail-followers-${lead.id}" value="${lead.followers ? formatFollowers(lead.followers) : ''}" placeholder="e.g. 89.2K" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Website</label>
+                        <input type="text" id="detail-website-${lead.id}" value="${esc(lead.website || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Rating</label>
+                        <input type="text" id="detail-rating-${lead.id}" value="${lead.rating || ''}" placeholder="e.g. 4.5" />
+                    </div>
+                    <div class="detail-field full">
+                        <label>Notes</label>
+                        <textarea id="detail-notes-${lead.id}">${esc(lead.notes || '')}</textarea>
+                    </div>
+                </div>
+                <div class="detail-actions">
+                    <button class="btn btn-save" onclick="saveLeadDetail(${lead.id})">Save Changes</button>
+                    <button class="btn btn-sm btn-ghost" onclick="reSearch(${lead.id}, this)" id="re-search-${lead.id}">Re-search Maps</button>
+                    <button class="btn btn-sm btn-ghost" style="border-color:#22c55e;color:#4ade80;" onclick="findEmail(${lead.id}, this)">Find Email</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteLead(${lead.id})" style="margin-left:auto;">Delete</button>
+                </div>
             </div>
         </div>`;
     }).join('');
+}
+
+function toggleLeadDetail(id) {
+    const card = document.getElementById('lead-' + id);
+    if (card) card.classList.toggle('expanded');
+}
+
+function openUrl(inputId) {
+    const url = document.getElementById(inputId).value.trim();
+    if (url) window.open(url, '_blank');
 }
 
 function formatFollowers(count) {
@@ -649,57 +808,65 @@ async function updateLead(id, field, value) {
     });
 }
 
-async function changeStatus(id, status) {
-    await updateLead(id, 'status', status);
-    if (status === 'to_message') {
-        await fetch(`/api/leads/${id}`, {
-            method: 'PATCH',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({maps_url: '', lat: null, lng: null, zone: ''})
-        });
-    }
-    loadLeads();
-}
 
 async function toggleReviewed(id, checked) {
     await updateLead(id, 'reviewed', checked ? 1 : 0);
     loadLeads();
 }
 
-async function removeMapsUrl(e, id) {
-    e.stopPropagation();
-    e.preventDefault();
-    if (!confirm('Remove Maps link and location data?')) return;
-    await fetch(`/api/leads/${id}`, {
-        method: 'PATCH',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({maps_url: '', address: '', lat: null, lng: null, zone: '', status: 'to_message'})
-    });
-    loadLeads();
-}
+async function saveLeadDetail(id) {
+    const data = {};
+    data.business_name = document.getElementById('detail-name-' + id).value.trim();
+    data.status = document.getElementById('detail-status-' + id).value;
+    data.platform = document.getElementById('detail-platform-' + id).value;
+    data.handle = document.getElementById('detail-handle-' + id).value.trim();
+    data.profile_url = document.getElementById('detail-profile-' + id).value.trim();
+    data.maps_url = document.getElementById('detail-maps-' + id).value.trim();
+    data.address = document.getElementById('detail-address-' + id).value.trim();
+    data.phone = document.getElementById('detail-phone-' + id).value.trim();
+    data.website = document.getElementById('detail-website-' + id).value.trim();
+    data.notes = document.getElementById('detail-notes-' + id).value;
 
-async function editName(id, current) {
-    const name = prompt('Edit business name:', current);
-    if (name === null || name === current) return;
-    await updateLead(id, 'business_name', name);
-    loadLeads();
-}
+    const emailVal = document.getElementById('detail-email-' + id).value.trim();
+    data.email = emailVal;
+    data.email_source = emailVal ? 'manual' : '';
 
-async function editMapsUrl(id) {
-    const url = prompt('Paste Google Maps link:');
-    if (url === null) return;
-    await updateLead(id, 'maps_url', url);
-    loadLeads();
-}
+    const followersRaw = document.getElementById('detail-followers-' + id).value.trim();
+    if (followersRaw) {
+        const num = parseFollowerInput(followersRaw);
+        if (num === null) { alert('Invalid follower count (e.g. 89.2K, 1.5M, 5000)'); return; }
+        data.followers = num;
+    } else {
+        data.followers = null;
+    }
 
-async function editFollowers(id, current) {
-    const def = current ? formatFollowers(current) : '';
-    const count = prompt('Enter follower count (e.g. 89.2K, 1.5M, 5000):', def);
-    if (count === null) return;
-    const num = parseFollowerInput(count);
-    if (num === null) { alert('Enter a valid number (e.g. 89.2K, 1.5M, 5000)'); return; }
-    await updateLead(id, 'followers', num);
-    loadLeads();
+    const ratingVal = document.getElementById('detail-rating-' + id).value.trim();
+    data.rating = ratingVal ? parseFloat(ratingVal) || null : null;
+
+    // If maps_url was cleared, also clear location data
+    if (!data.maps_url) {
+        data.lat = null;
+        data.lng = null;
+        data.zone = '';
+    }
+    // If status changed to to_message, clear maps/coords
+    if (data.status === 'to_message') {
+        data.maps_url = '';
+        data.lat = null;
+        data.lng = null;
+        data.zone = '';
+    }
+
+    try {
+        await fetch(`/api/leads/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        loadLeads();
+    } catch (err) {
+        alert('Error saving: ' + err.message);
+    }
 }
 
 function parseFollowerInput(str) {
@@ -731,12 +898,6 @@ async function reSearch(id, btn) {
     }
 }
 
-async function addNote(id) {
-    const note = prompt('Add a note:');
-    if (note === null) return;
-    await updateLead(id, 'notes', note);
-    loadLeads();
-}
 
 async function deleteLead(id) {
     if (!confirm('Delete this lead?')) return;
@@ -760,20 +921,335 @@ async function classifyZones() {
     }
 }
 
-async function fetchAllFollowers() {
-    const btn = document.getElementById('followers-btn');
+// --- Send to Visit ---
+async function sendToVisit(id, btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>Fetching...';
+    btn.textContent = '...';
     try {
-        const resp = await fetch('/api/fetch-all-followers', {method: 'POST'});
-        const data = await resp.json();
-        btn.textContent = `Done! ${data.fetched} fetched, ${data.failed} failed`;
+        await fetch(`/api/leads/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({priority: 1})
+        });
+        btn.textContent = '\u2713';
+        btn.style.color = '#4ade80';
         loadLeads();
-        setTimeout(() => { btn.textContent = 'Fetch Followers (TikTok)'; btn.disabled = false; }, 3000);
     } catch (err) {
-        btn.textContent = 'Error';
+        btn.textContent = 'error';
         btn.disabled = false;
     }
+}
+
+// --- To Visit Tab (Priority Queue) ---
+async function loadToVisit() {
+    try {
+        const resp = await fetch('/api/leads?priority=1');
+        const leads = await resp.json();
+        const sort = document.getElementById('tovisit-sort').value;
+        if (sort === 'followers') {
+            leads.sort((a, b) => (b.followers || 0) - (a.followers || 0));
+        }
+        document.getElementById('tovisit-count').textContent = leads.length + ' leads';
+        renderToVisitList(leads);
+    } catch (err) {
+        document.getElementById('tovisit-list').innerHTML = '<div class="no-result">Error loading leads</div>';
+    }
+}
+
+function renderToVisitList(leads) {
+    const container = document.getElementById('tovisit-list');
+    if (!leads.length) {
+        container.innerHTML = '<div class="empty-state"><p>No leads to visit yet.</p><p style="font-size:0.9rem;">Use the "\u2192 Visit" button in Saved Leads to add some.</p></div>';
+        return;
+    }
+    // Remember which leads were expanded
+    const expandedIds = new Set();
+    container.querySelectorAll('.lead-card.expanded').forEach(el => {
+        const m = el.id.match(/tovisit-(\d+)/);
+        if (m) expandedIds.add(m[1]);
+    });
+
+    container.innerHTML = leads.map(lead => {
+        const followersDisplay = lead.followers ? formatFollowers(lead.followers) : null;
+        const isExpanded = expandedIds.has(String(lead.id));
+        return `
+        <div class="lead-card${isExpanded ? ' expanded' : ''}" id="tovisit-${lead.id}">
+            <div class="lead-header" onclick="toggleToVisitDetail(${lead.id})">
+                <div class="lead-info">
+                    <div class="lead-name">
+                        <span>${esc(lead.business_name || lead.handle)}</span>
+                        ${lead.zone ? `<span class="badge badge-zone">${esc(lead.zone)}</span>` : ''}
+                        ${followersDisplay ? `<span class="badge badge-followers">${followersDisplay}</span>` : ''}
+                        ${lead.email ? `<span class="badge badge-email">Email</span>` : ''}
+                    </div>
+                    <div class="lead-meta">
+                        @${esc(lead.handle)} on ${esc(lead.platform)}
+                        ${lead.address ? ` &middot; ${esc(lead.address)}` : ''}
+                        ${lead.phone ? ` &middot; ${esc(lead.phone)}` : ''}
+                    </div>
+                </div>
+                <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
+                    ${lead.maps_url ? `<a href="${esc(lead.maps_url)}" target="_blank" class="btn btn-sm btn-ghost" onclick="event.stopPropagation();" style="padding:4px 10px;font-size:0.75rem;">Maps</a>` : ''}
+                    ${lead.profile_url ? `<a href="${esc(lead.profile_url)}" target="_blank" class="btn btn-sm btn-ghost" onclick="event.stopPropagation();" style="padding:4px 10px;font-size:0.75rem;">Profile</a>` : ''}
+                    <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); removeFromToVisit(${lead.id}, this)" style="padding:4px 10px;font-size:0.75rem;">Remove</button>
+                    <span style="color:#475569;font-size:1.2rem;">${isExpanded ? '\u25B2' : '\u25BC'}</span>
+                </div>
+            </div>
+            <div class="lead-detail">
+                <div class="detail-links">
+                    ${lead.profile_url ? `<a href="${esc(lead.profile_url)}" target="_blank">Open Profile</a>` : ''}
+                    ${lead.maps_url ? `<a href="${esc(lead.maps_url)}" target="_blank">Open in Maps</a>` : ''}
+                    ${lead.website ? `<a href="${esc(lead.website)}" target="_blank">Website</a>` : ''}
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-field">
+                        <label>Business Name</label>
+                        <input type="text" id="tv-name-${lead.id}" value="${esc(lead.business_name || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Status</label>
+                        <select id="tv-status-${lead.id}">
+                            ${['new','to_visit','to_message','contacted','client','skip'].map(s =>
+                                `<option value="${s}" ${lead.status===s?'selected':''}>${s.replace('_',' ')}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="detail-field">
+                        <label>Platform</label>
+                        <select id="tv-platform-${lead.id}">
+                            ${['tiktok','instagram','facebook','other'].map(p =>
+                                `<option value="${p}" ${lead.platform===p?'selected':''}>${p}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="detail-field">
+                        <label>Handle</label>
+                        <input type="text" id="tv-handle-${lead.id}" value="${esc(lead.handle || '')}" />
+                    </div>
+                    <div class="detail-field full">
+                        <label>Profile URL</label>
+                        <input type="text" id="tv-profile-${lead.id}" value="${esc(lead.profile_url || '')}" />
+                    </div>
+                    <div class="detail-field full">
+                        <label>Google Maps Link</label>
+                        <input type="text" id="tv-maps-${lead.id}" value="${esc(lead.maps_url || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Address</label>
+                        <input type="text" id="tv-address-${lead.id}" value="${esc(lead.address || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Phone</label>
+                        <input type="text" id="tv-phone-${lead.id}" value="${esc(lead.phone || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Email</label>
+                        <input type="text" id="tv-email-${lead.id}" value="${esc(lead.email || '')}" placeholder="Enter email" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Followers</label>
+                        <input type="text" id="tv-followers-${lead.id}" value="${lead.followers ? formatFollowers(lead.followers) : ''}" placeholder="e.g. 89.2K" />
+                    </div>
+                    <div class="detail-field full">
+                        <label>Notes</label>
+                        <textarea id="tv-notes-${lead.id}">${esc(lead.notes || '')}</textarea>
+                    </div>
+                </div>
+                <div class="detail-actions">
+                    <button class="btn btn-save" onclick="saveToVisitDetail(${lead.id})">Save Changes</button>
+                    <button class="btn btn-sm btn-ghost" onclick="reSearchToVisit(${lead.id}, this)">Re-search Maps</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteFromToVisit(${lead.id})" style="margin-left:auto;">Delete</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleToVisitDetail(id) {
+    const card = document.getElementById('tovisit-' + id);
+    if (card) card.classList.toggle('expanded');
+}
+
+async function saveToVisitDetail(id) {
+    const data = {};
+    data.business_name = document.getElementById('tv-name-' + id).value.trim();
+    data.status = document.getElementById('tv-status-' + id).value;
+    data.platform = document.getElementById('tv-platform-' + id).value;
+    data.handle = document.getElementById('tv-handle-' + id).value.trim();
+    data.profile_url = document.getElementById('tv-profile-' + id).value.trim();
+    data.maps_url = document.getElementById('tv-maps-' + id).value.trim();
+    data.address = document.getElementById('tv-address-' + id).value.trim();
+    data.phone = document.getElementById('tv-phone-' + id).value.trim();
+    data.notes = document.getElementById('tv-notes-' + id).value;
+
+    const emailVal = document.getElementById('tv-email-' + id).value.trim();
+    data.email = emailVal;
+    data.email_source = emailVal ? 'manual' : '';
+
+    const followersRaw = document.getElementById('tv-followers-' + id).value.trim();
+    if (followersRaw) {
+        const num = parseFollowerInput(followersRaw);
+        if (num === null) { alert('Invalid follower count'); return; }
+        data.followers = num;
+    } else {
+        data.followers = null;
+    }
+
+    if (!data.maps_url) {
+        data.lat = null;
+        data.lng = null;
+        data.zone = '';
+    }
+
+    try {
+        await fetch(`/api/leads/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        loadToVisit();
+    } catch (err) {
+        alert('Error saving: ' + err.message);
+    }
+}
+
+async function reSearchToVisit(id, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    try {
+        const resp = await fetch(`/api/re-search/${id}`, {method: 'POST'});
+        const data = await resp.json();
+        btn.textContent = data.found ? 'found!' : 'not found';
+        loadToVisit();
+    } catch (err) {
+        btn.textContent = 'error';
+    }
+}
+
+async function deleteFromToVisit(id) {
+    if (!confirm('Delete this lead?')) return;
+    await fetch(`/api/leads/${id}`, {method: 'DELETE'});
+    loadToVisit();
+}
+
+async function removeFromToVisit(id, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+        await fetch(`/api/leads/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({priority: 0})
+        });
+        loadToVisit();
+    } catch (err) {
+        btn.textContent = 'error';
+        btn.disabled = false;
+    }
+}
+
+// --- Follower Fetch (with progress) ---
+
+let followersRunning = false;
+let followersPaused = false;
+let followersQueue = [];
+let followersIndex = 0;
+
+async function startFollowerSearch() {
+    if (followersRunning) return;
+
+    const resp = await fetch('/api/followers-queue');
+    followersQueue = await resp.json();
+    if (!followersQueue.length) {
+        alert('No leads need follower fetching.');
+        return;
+    }
+
+    followersRunning = true;
+    followersPaused = false;
+    followersIndex = 0;
+
+    document.getElementById('followers-btn').style.display = 'none';
+    document.getElementById('followers-progress').style.display = 'block';
+    document.getElementById('followers-pause-btn').style.display = '';
+    document.getElementById('followers-resume-btn').style.display = 'none';
+    document.getElementById('followers-stop-btn').style.display = '';
+    document.getElementById('followers-found').textContent = 'Found: 0';
+    document.getElementById('followers-notfound').textContent = 'Failed: 0';
+
+    await runFollowersLoop();
+}
+
+async function runFollowersLoop() {
+    let found = parseInt(document.getElementById('followers-found').textContent.replace('Found: ', '')) || 0;
+    let failed = parseInt(document.getElementById('followers-notfound').textContent.replace('Failed: ', '')) || 0;
+
+    for (let i = followersIndex; i < followersQueue.length; i++) {
+        if (!followersRunning) break;
+        if (followersPaused) { followersIndex = i; return; }
+
+        const lead = followersQueue[i];
+        const name = lead.business_name || lead.handle;
+        const pct = Math.round(((i + 1) / followersQueue.length) * 100);
+
+        document.getElementById('followers-progress-text').textContent = `Fetching followers ${i + 1} / ${followersQueue.length}`;
+        document.getElementById('followers-progress-fill').style.width = pct + '%';
+        document.getElementById('followers-current').innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:1.5px;margin-right:4px;"></span>Fetching: <strong>${esc(name)}</strong> (${lead.platform})`;
+
+        try {
+            const resp = await fetch(`/api/fetch-followers/${lead.id}`, {method: 'POST'});
+            const data = await resp.json();
+            if (data.followers) {
+                found++;
+                document.getElementById('followers-current').innerHTML = `Found: <strong style="color:#4ade80">${data.display}</strong> for ${esc(name)}`;
+            } else {
+                failed++;
+                document.getElementById('followers-current').innerHTML = `No followers found for <strong>${esc(name)}</strong>`;
+            }
+        } catch (err) {
+            failed++;
+            document.getElementById('followers-current').innerHTML = `Error for ${esc(name)}`;
+        }
+
+        document.getElementById('followers-found').textContent = 'Found: ' + found;
+        document.getElementById('followers-notfound').textContent = 'Failed: ' + failed;
+        followersIndex = i + 1;
+    }
+
+    followersRunning = false;
+    document.getElementById('followers-progress-text').textContent = `Done: ${found} found, ${failed} failed`;
+    document.getElementById('followers-progress-fill').style.width = '100%';
+    document.getElementById('followers-current').textContent = '';
+    document.getElementById('followers-pause-btn').style.display = 'none';
+    document.getElementById('followers-resume-btn').style.display = 'none';
+    document.getElementById('followers-stop-btn').style.display = 'none';
+    document.getElementById('followers-btn').style.display = '';
+    document.getElementById('followers-btn').textContent = 'Fetch Followers';
+    loadLeads();
+    setTimeout(() => { document.getElementById('followers-progress').style.display = 'none'; }, 5000);
+}
+
+function pauseFollowerSearch() {
+    followersPaused = true;
+    document.getElementById('followers-pause-btn').style.display = 'none';
+    document.getElementById('followers-resume-btn').style.display = '';
+    document.getElementById('followers-current').innerHTML = '<strong style="color:#fbbf24">Paused</strong> — click Resume to continue';
+}
+
+function resumeFollowerSearch() {
+    followersPaused = false;
+    document.getElementById('followers-pause-btn').style.display = '';
+    document.getElementById('followers-resume-btn').style.display = 'none';
+    runFollowersLoop();
+}
+
+function stopFollowerSearch() {
+    followersRunning = false;
+    followersPaused = false;
+    document.getElementById('followers-progress').style.display = 'none';
+    document.getElementById('followers-btn').style.display = '';
+    document.getElementById('followers-btn').textContent = 'Fetch Followers';
+    loadLeads();
 }
 
 async function fixTiktokNames() {
@@ -791,6 +1267,131 @@ async function fixTiktokNames() {
         btn.disabled = false;
     }
 }
+
+// --- Email Discovery ---
+
+let emailRunning = false;
+let emailPaused = false;
+let emailQueue = [];
+let emailIndex = 0;
+
+async function findEmail(leadId, btn) {
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+    try {
+        const resp = await fetch(`/api/find-email/${leadId}`, {method: 'POST'});
+        const data = await resp.json();
+        if (data.email) {
+            loadLeads();
+        } else {
+            if (btn) { btn.textContent = 'not found'; setTimeout(() => { btn.textContent = 'find email'; btn.disabled = false; }, 2000); }
+        }
+    } catch (err) {
+        if (btn) { btn.textContent = 'error'; btn.disabled = false; }
+    }
+}
+
+async function startEmailSearch() {
+    if (emailRunning) return;
+
+    // Fetch the queue of leads needing emails
+    const resp = await fetch('/api/email-queue');
+    emailQueue = await resp.json();
+    if (!emailQueue.length) {
+        alert('No leads need email discovery (all already have emails or no supported platforms).');
+        return;
+    }
+
+    emailRunning = true;
+    emailPaused = false;
+    emailIndex = 0;
+
+    document.getElementById('emails-btn').style.display = 'none';
+    document.getElementById('email-progress').style.display = 'block';
+    document.getElementById('email-pause-btn').style.display = '';
+    document.getElementById('email-resume-btn').style.display = 'none';
+
+    await runEmailLoop();
+}
+
+async function runEmailLoop() {
+    let found = 0, notfound = 0;
+
+    // Update counters from where we left off (for resume)
+    const startFrom = emailIndex;
+    // Recount previous results
+    // (we track found/notfound in DOM so just parse them)
+    found = parseInt(document.getElementById('email-found').textContent.replace('Found: ', '')) || 0;
+    notfound = parseInt(document.getElementById('email-notfound').textContent.replace('Not found: ', '')) || 0;
+
+    for (let i = startFrom; i < emailQueue.length; i++) {
+        if (!emailRunning) break;
+        if (emailPaused) { emailIndex = i; return; }
+
+        const lead = emailQueue[i];
+        const name = lead.business_name || lead.handle;
+        const pct = Math.round(((i + 1) / emailQueue.length) * 100);
+
+        document.getElementById('email-progress-text').textContent = `Finding emails ${i + 1} / ${emailQueue.length}`;
+        document.getElementById('email-progress-fill').style.width = pct + '%';
+        document.getElementById('email-current').innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:1.5px;margin-right:4px;"></span>Searching: <strong>${esc(name)}</strong> (${lead.platform})`;
+
+        try {
+            const resp = await fetch(`/api/find-email/${lead.id}`, {method: 'POST'});
+            const data = await resp.json();
+            if (data.email) {
+                found++;
+                document.getElementById('email-current').innerHTML = `Found: <strong style="color:#4ade80">${data.email}</strong> for ${esc(name)} <span style="color:#64748b">(${data.source})</span>`;
+            } else {
+                notfound++;
+                document.getElementById('email-current').innerHTML = `No email found for <strong>${esc(name)}</strong>`;
+            }
+        } catch (err) {
+            notfound++;
+            document.getElementById('email-current').innerHTML = `Error for ${esc(name)}`;
+        }
+
+        document.getElementById('email-found').textContent = 'Found: ' + found;
+        document.getElementById('email-notfound').textContent = 'Not found: ' + notfound;
+        emailIndex = i + 1;
+    }
+
+    // Finished or stopped
+    emailRunning = false;
+    document.getElementById('email-progress-text').textContent = `Done: ${found} found, ${notfound} not found`;
+    document.getElementById('email-progress-fill').style.width = '100%';
+    document.getElementById('email-current').textContent = '';
+    document.getElementById('email-pause-btn').style.display = 'none';
+    document.getElementById('email-resume-btn').style.display = 'none';
+    document.getElementById('email-stop-btn').style.display = 'none';
+    document.getElementById('emails-btn').style.display = '';
+    document.getElementById('emails-btn').textContent = 'Find Emails';
+    loadLeads();
+    setTimeout(() => { document.getElementById('email-progress').style.display = 'none'; }, 5000);
+}
+
+function pauseEmailSearch() {
+    emailPaused = true;
+    document.getElementById('email-pause-btn').style.display = 'none';
+    document.getElementById('email-resume-btn').style.display = '';
+    document.getElementById('email-current').innerHTML = '<strong style="color:#fbbf24">Paused</strong> — click Resume to continue';
+}
+
+function resumeEmailSearch() {
+    emailPaused = false;
+    document.getElementById('email-pause-btn').style.display = '';
+    document.getElementById('email-resume-btn').style.display = 'none';
+    runEmailLoop();
+}
+
+function stopEmailSearch() {
+    emailRunning = false;
+    emailPaused = false;
+    document.getElementById('email-progress').style.display = 'none';
+    document.getElementById('emails-btn').style.display = '';
+    document.getElementById('emails-btn').textContent = 'Find Emails';
+    loadLeads();
+}
+
 
 // --- Route Planner ---
 let selectedZone = '';

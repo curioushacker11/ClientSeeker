@@ -83,32 +83,81 @@ def classify_lead_zone(lat, lng):
 
 # --- Follower Count ---
 
-TIKTOK_HEADERS = {
+SCRAPE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                   "AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9,es;q=0.8",
 }
 
 
 def fetch_followers(platform, profile_url):
     """Try to fetch follower count from the social media profile page."""
-    if platform != "tiktok":
+    if not profile_url:
         return None
     try:
-        resp = requests.get(profile_url, headers=TIKTOK_HEADERS, timeout=10)
-        # TikTok embeds followerCount in page source JSON
-        match = re.search(r'"followerCount"\s*:\s*(\d+)', resp.text)
-        if match:
-            return int(match.group(1))
+        resp = requests.get(profile_url, headers=SCRAPE_HEADERS, timeout=15)
+        text = resp.text
+
+        if platform == "tiktok":
+            match = re.search(r'"followerCount"\s*:\s*(\d+)', text)
+            if match:
+                return int(match.group(1))
+
+        elif platform == "instagram":
+            # Meta tag: "1,234 Followers" or "1234 Followers"
+            match = re.search(
+                r'content="([0-9][0-9,\.KMkm]*)\s+[Ff]ollowers', text)
+            if match:
+                return _parse_follower_string(match.group(1))
+            # JSON: "edge_followed_by":{"count":1234}
+            match = re.search(r'"edge_followed_by"\s*:\s*\{\s*"count"\s*:\s*(\d+)', text)
+            if match:
+                return int(match.group(1))
+            # Newer IG JSON: "follower_count":1234
+            match = re.search(r'"follower_count"\s*:\s*(\d+)', text)
+            if match:
+                return int(match.group(1))
+
+        elif platform == "facebook":
+            # "1,234 followers" or "1.2K followers" in page text/meta
+            match = re.search(
+                r'content="([0-9][0-9,\.KMkm]*)\s+[Ff]ollowers', text)
+            if match:
+                return _parse_follower_string(match.group(1))
+            # JSON patterns: "follower_count":1234
+            match = re.search(r'"follower_count"\s*:\s*(\d+)', text)
+            if match:
+                return int(match.group(1))
+            # "1,234 people follow this"
+            match = re.search(
+                r'([\d][\d,\.]*[KMkm]?)\s+people follow', text)
+            if match:
+                return _parse_follower_string(match.group(1))
+
     except Exception:
         pass
     return None
 
 
+def _parse_follower_string(s):
+    """Parse follower strings like '1,234', '89.2K', '1.5M' into int."""
+    s = s.strip().replace(",", "")
+    upper = s.upper()
+    if upper.endswith("M"):
+        return int(float(upper[:-1]) * 1_000_000)
+    if upper.endswith("K"):
+        return int(float(upper[:-1]) * 1_000)
+    try:
+        return int(s)
+    except ValueError:
+        return None
+
+
 def fetch_tiktok_name(profile_url):
     """Fetch the display name (nickname) from a TikTok profile page."""
     try:
-        resp = requests.get(profile_url, headers=TIKTOK_HEADERS, timeout=10)
+        resp = requests.get(profile_url, headers=SCRAPE_HEADERS, timeout=10)
         match = re.search(r'"nickname"\s*:\s*"([^"]+)"', resp.text)
         if match:
             return match.group(1)
@@ -174,6 +223,9 @@ def init_db():
         ("reviewed", "INTEGER DEFAULT 0"),
         ("followers", "INTEGER"),
         ("zone", "TEXT DEFAULT ''"),
+        ("email", "TEXT DEFAULT ''"),
+        ("email_source", "TEXT DEFAULT ''"),
+        ("priority", "INTEGER DEFAULT 0"),
     ]:
         try:
             db.execute(f"ALTER TABLE leads ADD COLUMN {col} {typedef}")
@@ -400,6 +452,7 @@ def get_leads():
     db = get_db()
     status_filter = request.args.get("status")
     zone_filter = request.args.get("zone")
+    priority_filter = request.args.get("priority")
 
     query = "SELECT * FROM leads WHERE 1=1"
     params = []
@@ -409,6 +462,9 @@ def get_leads():
     if zone_filter:
         query += " AND zone = ?"
         params.append(zone_filter)
+    if priority_filter:
+        query += " AND priority = ?"
+        params.append(int(priority_filter))
     query += " ORDER BY created_at DESC"
 
     rows = db.execute(query, params).fetchall()
@@ -422,7 +478,9 @@ def update_lead(lead_id):
     fields = []
     values = []
     for key in ("status", "notes", "business_name", "maps_url", "address",
-                "lat", "lng", "reviewed", "followers", "zone"):
+                "lat", "lng", "reviewed", "followers", "zone",
+                "email", "email_source", "phone", "profile_url",
+                "handle", "platform", "website", "rating", "priority"):
         if key in data:
             fields.append(f"{key} = ?")
             values.append(data[key])
@@ -636,27 +694,17 @@ def fetch_followers_for_lead(lead_id):
     return jsonify({"followers": count, "display": format_followers(count)})
 
 
-@app.route("/api/fetch-all-followers", methods=["POST"])
-def fetch_all_followers():
-    """Fetch follower counts for all leads that don't have one yet."""
+@app.route("/api/followers-queue", methods=["GET"])
+def followers_queue():
+    """Return list of leads needing follower count fetch."""
     db = get_db()
     rows = db.execute(
-        "SELECT id, platform, profile_url FROM leads "
-        "WHERE (followers IS NULL OR followers = 0) AND platform = 'tiktok'"
+        "SELECT id, handle, business_name, platform FROM leads "
+        "WHERE (followers IS NULL OR followers = 0) "
+        "AND platform IN ('tiktok', 'instagram', 'facebook') "
+        "ORDER BY created_at DESC"
     ).fetchall()
-
-    fetched = 0
-    failed = 0
-    for row in rows:
-        count = fetch_followers(row["platform"], row["profile_url"])
-        if count is not None:
-            db.execute("UPDATE leads SET followers = ? WHERE id = ?", (count, row["id"]))
-            fetched += 1
-        else:
-            failed += 1
-        time.sleep(1)  # Rate limit
-    db.commit()
-    return jsonify({"fetched": fetched, "failed": failed, "total": len(rows)})
+    return jsonify([dict(r) for r in rows])
 
 
 @app.route("/api/fix-tiktok-names", methods=["POST"])
@@ -716,6 +764,151 @@ def re_search_lead(lead_id):
     )
     db.commit()
     return jsonify({"found": True, "data": data, "zone": zone})
+
+
+# --- Email Discovery ---
+
+def _discover_email(lead_row):
+    """
+    Multi-phase email discovery for a single lead.
+    Returns (email, source) or (None, None).
+    Phases:
+      1. Scrape social profile (email in bio, business email)
+      2. Follow bio links / website (crawl for emails)
+      3. Google search "{display_name} Costa Rica email"
+    """
+    profile_url = lead_row["profile_url"]
+    platform = lead_row["platform"]
+    business_name = (lead_row["business_name"] or "").strip()
+    handle = (lead_row["handle"] or "").strip()
+    display_name = business_name or handle
+
+    # Phase 1: Scrape social profile
+    try:
+        resp = requests.post(
+            f"{SCRAPER_URL}/scrape-profile",
+            json={"url": profile_url, "platform": platform},
+            timeout=35,
+        )
+        if resp.ok:
+            data = resp.json()
+            if data.get("emails"):
+                return data["emails"][0], f"{platform}_profile"
+            # Update display_name if we got one from the profile
+            if data.get("display_name") and not business_name:
+                display_name = data["display_name"]
+            # Collect links for Phase 2
+            bio_links = data.get("links", [])
+        else:
+            bio_links = []
+    except Exception:
+        bio_links = []
+
+    time.sleep(1)
+
+    # Phase 2: Follow bio links / lead's website
+    urls_to_check = list(bio_links)
+    lead_website = (lead_row["website"] or "").strip()
+    if lead_website and lead_website not in urls_to_check:
+        urls_to_check.append(lead_website)
+
+    for link_url in urls_to_check[:3]:  # Max 3 links
+        try:
+            resp = requests.post(
+                f"{SCRAPER_URL}/scrape-page",
+                json={"url": link_url},
+                timeout=35,
+            )
+            if resp.ok:
+                data = resp.json()
+                if data.get("emails"):
+                    source = "website"
+                    if "linktr" in link_url.lower():
+                        source = "linktree"
+                    return data["emails"][0], source
+        except Exception:
+            pass
+        time.sleep(1)
+
+    # Phase 3: Google search
+    queries = []
+    if display_name:
+        queries.append(f'"{display_name}" Costa Rica email')
+        queries.append(f'"{display_name}" Costa Rica contacto correo')
+    if handle and handle != display_name:
+        queries.append(f'"{handle}" email contacto')
+
+    for q in queries[:2]:  # Max 2 searches
+        try:
+            resp = requests.post(
+                f"{SCRAPER_URL}/google-search",
+                json={"query": q, "max_results": 5},
+                timeout=35,
+            )
+            if resp.ok:
+                data = resp.json()
+                # Check emails found in snippets
+                if data.get("emails_in_snippets"):
+                    return data["emails_in_snippets"][0], "google_search"
+                # Try scraping top results that look like business pages
+                for r in data.get("results", [])[:2]:
+                    result_url = r.get("url", "")
+                    # Skip social media and Google domains
+                    if any(d in result_url for d in [
+                        "facebook.com", "instagram.com", "tiktok.com",
+                        "google.com", "youtube.com", "twitter.com",
+                    ]):
+                        continue
+                    try:
+                        page_resp = requests.post(
+                            f"{SCRAPER_URL}/scrape-page",
+                            json={"url": result_url},
+                            timeout=35,
+                        )
+                        if page_resp.ok and page_resp.json().get("emails"):
+                            return page_resp.json()["emails"][0], "google_result"
+                    except Exception:
+                        pass
+                    time.sleep(1)
+        except Exception:
+            pass
+        time.sleep(1)
+
+    return None, None
+
+
+@app.route("/api/find-email/<int:lead_id>", methods=["POST"])
+def find_email(lead_id):
+    """Run email discovery pipeline for a single lead."""
+    db = get_db()
+    row = db.execute(
+        "SELECT id, platform, handle, profile_url, business_name, website, email "
+        "FROM leads WHERE id = ?", (lead_id,)
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "Lead not found"}), 404
+
+    email, source = _discover_email(row)
+    if email:
+        db.execute(
+            "UPDATE leads SET email = ?, email_source = ? WHERE id = ?",
+            (email, source, lead_id),
+        )
+        db.commit()
+    return jsonify({"email": email, "source": source})
+
+
+@app.route("/api/email-queue", methods=["GET"])
+def email_queue():
+    """Return list of leads needing email discovery."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, handle, business_name, platform FROM leads "
+        "WHERE (email IS NULL OR email = '') "
+        "AND platform IN ('tiktok', 'instagram', 'facebook') "
+        "ORDER BY created_at DESC"
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
 
 
 # --- Route Optimizer ---
