@@ -231,6 +231,24 @@ def init_db():
             db.execute(f"ALTER TABLE leads ADD COLUMN {col} {typedef}")
         except Exception:
             pass
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS trips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            start_lat REAL,
+            start_lng REAL,
+            start_label TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS trip_leads (
+            trip_id INTEGER NOT NULL,
+            lead_id INTEGER NOT NULL,
+            PRIMARY KEY (trip_id, lead_id)
+        )
+    """)
     db.commit()
 
 
@@ -991,6 +1009,177 @@ def optimize_route():
         "route_geometry": trip["geometry"],
         "google_maps_url": gmaps_url,
     })
+
+
+# --- Trips ---
+
+def _osrm_optimize(leads, start_lat=None, start_lng=None):
+    """Build OSRM trip request and return (result_dict, None) or (None, error_str)."""
+    coords = []
+    if start_lat is not None and start_lng is not None:
+        coords.append({"lng": float(start_lng), "lat": float(start_lat), "is_start": True})
+    for lead in leads:
+        coords.append({"lng": lead["lng"], "lat": lead["lat"], "lead": lead})
+
+    if len(coords) < 2:
+        return None, "Need at least 2 points for a route"
+
+    coord_str = ";".join(f"{c['lng']},{c['lat']}" for c in coords)
+    source_param = "first" if start_lat is not None else "any"
+
+    try:
+        resp = requests.get(
+            f"https://router.project-osrm.org/trip/v1/driving/{coord_str}",
+            params={"source": source_param, "roundtrip": "false",
+                    "geometries": "geojson", "overview": "full"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        osrm = resp.json()
+    except requests.RequestException as e:
+        return None, f"OSRM request failed: {e}"
+
+    if osrm.get("code") != "Ok":
+        return None, f"OSRM error: {osrm.get('message', 'unknown')}"
+
+    trip = osrm["trips"][0]
+    waypoint_order = [w["waypoint_index"] for w in osrm["waypoints"]]
+
+    ordered_leads = []
+    for idx in waypoint_order:
+        c = coords[idx]
+        if "lead" in c:
+            ordered_leads.append(c["lead"])
+
+    gmaps_waypoints = [f"{lead['lat']},{lead['lng']}" for lead in ordered_leads]
+    if start_lat is not None:
+        origin = f"{start_lat},{start_lng}"
+    else:
+        origin = gmaps_waypoints.pop(0)
+
+    gmaps_url = f"https://www.google.com/maps/dir/{origin}"
+    for wp in gmaps_waypoints:
+        gmaps_url += f"/{wp}"
+
+    return {
+        "ordered_leads": ordered_leads,
+        "total_distance_km": round(trip["distance"] / 1000, 1),
+        "total_duration_min": round(trip["duration"] / 60),
+        "route_geometry": trip["geometry"],
+        "google_maps_url": gmaps_url,
+    }, None
+
+
+@app.route("/api/trips", methods=["GET"])
+def list_trips():
+    db = get_db()
+    rows = db.execute("""
+        SELECT t.*, COUNT(tl.lead_id) as lead_count
+        FROM trips t
+        LEFT JOIN trip_leads tl ON tl.trip_id = t.id
+        GROUP BY t.id
+        ORDER BY t.created_at DESC
+    """).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/trips", methods=["POST"])
+def create_trip():
+    data = request.json or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Name required"}), 400
+    lead_ids = data.get("lead_ids") or []
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO trips (name, start_lat, start_lng, start_label, notes) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (name, data.get("start_lat"), data.get("start_lng"),
+         data.get("start_label", ""), data.get("notes", "")),
+    )
+    trip_id = cur.lastrowid
+    for lid in lead_ids:
+        db.execute(
+            "INSERT OR IGNORE INTO trip_leads (trip_id, lead_id) VALUES (?, ?)",
+            (trip_id, int(lid)),
+        )
+    db.commit()
+    return jsonify({"id": trip_id})
+
+
+@app.route("/api/trips/<int:trip_id>", methods=["GET"])
+def get_trip(trip_id):
+    db = get_db()
+    trip = db.execute("SELECT * FROM trips WHERE id = ?", (trip_id,)).fetchone()
+    if not trip:
+        return jsonify({"error": "Not found"}), 404
+    leads = db.execute("""
+        SELECT l.* FROM leads l
+        INNER JOIN trip_leads tl ON tl.lead_id = l.id
+        WHERE tl.trip_id = ?
+    """, (trip_id,)).fetchall()
+    result = dict(trip)
+    result["leads"] = [dict(r) for r in leads]
+    return jsonify(result)
+
+
+@app.route("/api/trips/<int:trip_id>", methods=["PATCH"])
+def update_trip(trip_id):
+    data = request.json or {}
+    db = get_db()
+    if not db.execute("SELECT id FROM trips WHERE id = ?", (trip_id,)).fetchone():
+        return jsonify({"error": "Not found"}), 404
+
+    fields, values = [], []
+    for key in ("name", "start_lat", "start_lng", "start_label", "notes"):
+        if key in data:
+            fields.append(f"{key} = ?")
+            values.append(data[key])
+    if fields:
+        values.append(trip_id)
+        db.execute(f"UPDATE trips SET {', '.join(fields)} WHERE id = ?", values)
+
+    if "lead_ids" in data:
+        db.execute("DELETE FROM trip_leads WHERE trip_id = ?", (trip_id,))
+        for lid in data["lead_ids"]:
+            db.execute(
+                "INSERT OR IGNORE INTO trip_leads (trip_id, lead_id) VALUES (?, ?)",
+                (trip_id, int(lid)),
+            )
+    db.commit()
+    return jsonify({"updated": True})
+
+
+@app.route("/api/trips/<int:trip_id>", methods=["DELETE"])
+def delete_trip(trip_id):
+    db = get_db()
+    db.execute("DELETE FROM trip_leads WHERE trip_id = ?", (trip_id,))
+    db.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
+    db.commit()
+    return jsonify({"deleted": True})
+
+
+@app.route("/api/trips/<int:trip_id>/optimize", methods=["POST"])
+def optimize_trip(trip_id):
+    db = get_db()
+    trip = db.execute("SELECT * FROM trips WHERE id = ?", (trip_id,)).fetchone()
+    if not trip:
+        return jsonify({"error": "Not found"}), 404
+
+    rows = db.execute("""
+        SELECT l.* FROM leads l
+        INNER JOIN trip_leads tl ON tl.lead_id = l.id
+        WHERE tl.trip_id = ? AND l.lat IS NOT NULL AND l.lng IS NOT NULL
+    """, (trip_id,)).fetchall()
+    leads = [dict(r) for r in rows]
+
+    if not leads:
+        return jsonify({"error": "No leads with coordinates in this trip"}), 400
+
+    result, err = _osrm_optimize(leads, trip["start_lat"], trip["start_lng"])
+    if err:
+        return jsonify({"error": err}), 500
+    return jsonify(result)
 
 
 if __name__ == "__main__":
