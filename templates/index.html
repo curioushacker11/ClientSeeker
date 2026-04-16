@@ -1629,6 +1629,26 @@ async function loadMapLeads() {
     } catch {}
 }
 
+async function fixMissingCoords(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Working (1/sec)...';
+    try {
+        const resp = await fetch('/api/classify-zones', { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed');
+        await loadMapLeads();
+        await loadTripsZones();
+        const msg = `Filled coords for ${data.coords_filled} lead(s); classified ${data.classified} zone(s).`;
+        const unmappedEl = document.getElementById('trips-unmapped');
+        if (!unmappedEl.textContent.trim()) unmappedEl.textContent = msg;
+        else unmappedEl.innerHTML = msg + ' ' + unmappedEl.innerHTML;
+    } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Fix missing coordinates';
+    }
+}
+
 function renderTripMarkers() {
     if (!tripsMap) return;
     Object.values(tripsMarkers).forEach(m => tripsMap.removeLayer(m));
@@ -1639,9 +1659,14 @@ function renderTripMarkers() {
         (!tripsZoneFilter || l.zone === tripsZoneFilter));
     const unmapped = all.filter(l => l.lat == null || l.lng == null).length;
 
-    document.getElementById('trips-unmapped').textContent = unmapped
-        ? `${unmapped} "To Visit" lead(s) have no coordinates — not shown on map.`
-        : '';
+    const unmappedEl = document.getElementById('trips-unmapped');
+    if (unmapped) {
+        unmappedEl.innerHTML =
+            `${unmapped} "To Visit" lead(s) have no coordinates — not shown on map. ` +
+            `<button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="fixMissingCoords(this)">Fix missing coordinates</button>`;
+    } else {
+        unmappedEl.innerHTML = '';
+    }
 
     const bounds = [];
     visible.forEach(lead => {
