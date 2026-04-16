@@ -1181,5 +1181,73 @@ def optimize_trip(trip_id):
     return jsonify(result)
 
 
+@app.route("/api/trips/<int:trip_id>/route", methods=["POST"])
+def route_trip(trip_id):
+    """Compute distance/duration for a fixed-order lead sequence (OSRM route service)."""
+    data = request.json or {}
+    lead_ids = data.get("lead_ids") or []
+    if not lead_ids:
+        return jsonify({"error": "lead_ids required"}), 400
+
+    db = get_db()
+    trip = db.execute("SELECT * FROM trips WHERE id = ?", (trip_id,)).fetchone()
+    if not trip:
+        return jsonify({"error": "Not found"}), 404
+
+    placeholders = ",".join("?" * len(lead_ids))
+    rows = db.execute(
+        f"SELECT * FROM leads WHERE id IN ({placeholders}) "
+        "AND lat IS NOT NULL AND lng IS NOT NULL",
+        [int(x) for x in lead_ids],
+    ).fetchall()
+    by_id = {r["id"]: dict(r) for r in rows}
+    ordered_leads = [by_id[int(lid)] for lid in lead_ids if int(lid) in by_id]
+    if len(ordered_leads) < 1:
+        return jsonify({"error": "No valid leads with coordinates"}), 400
+
+    coords = []
+    if trip["start_lat"] is not None and trip["start_lng"] is not None:
+        coords.append((trip["start_lng"], trip["start_lat"]))
+    for lead in ordered_leads:
+        coords.append((lead["lng"], lead["lat"]))
+
+    if len(coords) < 2:
+        return jsonify({"error": "Need at least 2 points for a route"}), 400
+
+    coord_str = ";".join(f"{lng},{lat}" for lng, lat in coords)
+    try:
+        resp = requests.get(
+            f"https://router.project-osrm.org/route/v1/driving/{coord_str}",
+            params={"geometries": "geojson", "overview": "full"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        osrm = resp.json()
+    except requests.RequestException as e:
+        return jsonify({"error": f"OSRM request failed: {e}"}), 500
+
+    if osrm.get("code") != "Ok":
+        return jsonify({"error": f"OSRM error: {osrm.get('message', 'unknown')}"}), 500
+
+    route = osrm["routes"][0]
+
+    gmaps_waypoints = [f"{l['lat']},{l['lng']}" for l in ordered_leads]
+    if trip["start_lat"] is not None:
+        origin = f"{trip['start_lat']},{trip['start_lng']}"
+    else:
+        origin = gmaps_waypoints.pop(0)
+    gmaps_url = f"https://www.google.com/maps/dir/{origin}"
+    for wp in gmaps_waypoints:
+        gmaps_url += f"/{wp}"
+
+    return jsonify({
+        "ordered_leads": ordered_leads,
+        "total_distance_km": round(route["distance"] / 1000, 1),
+        "total_duration_min": round(route["duration"] / 60),
+        "route_geometry": route["geometry"],
+        "google_maps_url": gmaps_url,
+    })
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5001, host="0.0.0.0")

@@ -115,6 +115,11 @@
         .stop-info { flex: 1; }
         .stop-name { font-weight: 600; color: #f8fafc; }
         .stop-addr { font-size: 0.85rem; color: #94a3b8; }
+        .route-stop-draggable { cursor: grab; }
+        .route-stop-draggable:active { cursor: grabbing; }
+        .stop-drag { color: #64748b; font-size: 1rem; user-select: none; line-height: 1; letter-spacing: -2px; }
+        .route-stop-dragging { opacity: 0.4; }
+        .route-stop-dragover { outline: 2px dashed #38bdf8; outline-offset: -2px; }
 
         .zone-selector { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
         .zone-selector label { font-size: 0.85rem; color: #94a3b8; }
@@ -1894,19 +1899,50 @@ function optimizeCurrentTrip() {
     optimizeTrip(currentTripId);
 }
 
+let currentRouteLeads = [];
+let currentRouteTrip = null;
+let routeDragFromIdx = null;
+
 function renderTripRoute(data, trip) {
+    currentRouteLeads = (data.ordered_leads || []).slice();
+    currentRouteTrip = trip;
     const container = document.getElementById('trip-route-results');
-    let stopsHtml = '';
-    if (trip.start_lat != null) {
-        stopsHtml += `
+    container.innerHTML = `
+        <div class="route-summary">
+            <div style="font-weight:600; color:#f8fafc; margin-bottom:12px;">Route: ${esc(trip.name)}</div>
+            <div class="route-stats">
+                <div class="route-stat"><div class="label">Stops</div><div class="value">${currentRouteLeads.length}</div></div>
+                <div class="route-stat"><div class="label">Total Distance</div><div class="value" id="route-dist-val">${data.total_distance_km} km</div></div>
+                <div class="route-stat"><div class="label">Drive Time</div><div class="value" id="route-dur-val">${data.total_duration_min} min</div></div>
+            </div>
+            <a id="route-gmaps-link" href="${esc(data.google_maps_url)}" target="_blank" class="btn btn-primary" style="display:inline-block; text-decoration:none; margin-bottom:12px;">Open Route in Google Maps</a>
+            <div class="helper" style="margin-bottom:8px;">Drag stops to reorder — totals recalculate automatically.</div>
+            <div id="route-stops-list"></div>
+        </div>`;
+    renderRouteStops();
+}
+
+function renderRouteStops() {
+    const list = document.getElementById('route-stops-list');
+    if (!list) return;
+    const trip = currentRouteTrip;
+    let html = '';
+    if (trip && trip.start_lat != null) {
+        html += `
             <div class="route-stop">
                 <div class="stop-number">S</div>
                 <div class="stop-info"><div class="stop-name">Start: ${esc(trip.start_label || '')}</div><div class="stop-addr">${trip.start_lat}, ${trip.start_lng}</div></div>
             </div>`;
     }
-    data.ordered_leads.forEach((lead, i) => {
-        stopsHtml += `
-            <div class="route-stop">
+    currentRouteLeads.forEach((lead, i) => {
+        html += `
+            <div class="route-stop route-stop-draggable" draggable="true" data-idx="${i}"
+                 ondragstart="routeDragStart(event, ${i})"
+                 ondragover="routeDragOver(event)"
+                 ondragleave="routeDragLeave(event)"
+                 ondrop="routeDrop(event, ${i})"
+                 ondragend="routeDragEnd(event)">
+                <div class="stop-drag">⋮⋮</div>
                 <div class="stop-number">${i + 1}</div>
                 <div class="stop-info">
                     <div class="stop-name">${esc(lead.business_name || lead.handle)}</div>
@@ -1914,17 +1950,72 @@ function renderTripRoute(data, trip) {
                 </div>
             </div>`;
     });
-    container.innerHTML = `
-        <div class="route-summary">
-            <div style="font-weight:600; color:#f8fafc; margin-bottom:12px;">Route: ${esc(trip.name)}</div>
-            <div class="route-stats">
-                <div class="route-stat"><div class="label">Stops</div><div class="value">${data.ordered_leads.length}</div></div>
-                <div class="route-stat"><div class="label">Total Distance</div><div class="value">${data.total_distance_km} km</div></div>
-                <div class="route-stat"><div class="label">Drive Time</div><div class="value">${data.total_duration_min} min</div></div>
-            </div>
-            <a href="${esc(data.google_maps_url)}" target="_blank" class="btn btn-primary" style="display:inline-block; text-decoration:none; margin-bottom:16px;">Open Route in Google Maps</a>
-            <div>${stopsHtml}</div>
-        </div>`;
+    list.innerHTML = html;
+}
+
+function routeDragStart(e, idx) {
+    routeDragFromIdx = idx;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(idx)); } catch (_) {}
+    e.currentTarget.classList.add('route-stop-dragging');
+}
+
+function routeDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('route-stop-dragover');
+}
+
+function routeDragLeave(e) {
+    e.currentTarget.classList.remove('route-stop-dragover');
+}
+
+function routeDrop(e, idx) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('route-stop-dragover');
+    if (routeDragFromIdx === null || routeDragFromIdx === idx) { routeDragFromIdx = null; return; }
+    const [moved] = currentRouteLeads.splice(routeDragFromIdx, 1);
+    currentRouteLeads.splice(idx, 0, moved);
+    routeDragFromIdx = null;
+    renderRouteStops();
+    recalculateRoute();
+}
+
+function routeDragEnd(e) {
+    document.querySelectorAll('.route-stop-dragging, .route-stop-dragover').forEach(el => {
+        el.classList.remove('route-stop-dragging', 'route-stop-dragover');
+    });
+    routeDragFromIdx = null;
+}
+
+async function recalculateRoute() {
+    if (!currentTripId) return;
+    const distEl = document.getElementById('route-dist-val');
+    const durEl = document.getElementById('route-dur-val');
+    if (distEl) distEl.textContent = '…';
+    if (durEl) durEl.textContent = '…';
+    try {
+        const resp = await fetch(`/api/trips/${currentTripId}/route`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lead_ids: currentRouteLeads.map(l => l.id) }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            if (distEl) distEl.textContent = '—';
+            if (durEl) durEl.textContent = '—';
+            alert(data.error || 'Recalculation failed');
+            return;
+        }
+        if (distEl) distEl.textContent = data.total_distance_km + ' km';
+        if (durEl) durEl.textContent = data.total_duration_min + ' min';
+        const link = document.getElementById('route-gmaps-link');
+        if (link) link.href = data.google_maps_url;
+    } catch (err) {
+        if (distEl) distEl.textContent = '—';
+        if (durEl) durEl.textContent = '—';
+        alert('Recalculation error: ' + err.message);
+    }
 }
 
 function esc(str) {
