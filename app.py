@@ -983,13 +983,13 @@ def optimize_route():
         return jsonify({"error": f"OSRM error: {osrm.get('message', 'unknown')}"}), 500
 
     trip = osrm["trips"][0]
-    waypoint_order = [w["waypoint_index"] for w in osrm["waypoints"]]
 
-    ordered_leads = []
-    for idx in waypoint_order:
-        c = coords[idx]
-        if "lead" in c:
-            ordered_leads.append(c["lead"])
+    # waypoint_index = position in optimized trip, sort input coords by it
+    visit_order = sorted(
+        zip([w["waypoint_index"] for w in osrm["waypoints"]], coords),
+        key=lambda x: x[0],
+    )
+    ordered_leads = [c["lead"] for _, c in visit_order if "lead" in c]
 
     gmaps_waypoints = [f"{lead['lat']},{lead['lng']}" for lead in ordered_leads]
 
@@ -1043,13 +1043,12 @@ def _osrm_optimize(leads, start_lat=None, start_lng=None):
         return None, f"OSRM error: {osrm.get('message', 'unknown')}"
 
     trip = osrm["trips"][0]
-    waypoint_order = [w["waypoint_index"] for w in osrm["waypoints"]]
 
-    ordered_leads = []
-    for idx in waypoint_order:
-        c = coords[idx]
-        if "lead" in c:
-            ordered_leads.append(c["lead"])
+    visit_order = sorted(
+        zip([w["waypoint_index"] for w in osrm["waypoints"]], coords),
+        key=lambda x: x[0],
+    )
+    ordered_leads = [c["lead"] for _, c in visit_order if "lead" in c]
 
     gmaps_waypoints = [f"{lead['lat']},{lead['lng']}" for lead in ordered_leads]
     if start_lat is not None:
