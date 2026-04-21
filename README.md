@@ -11,23 +11,30 @@ Client prospecting tool — paste social media links, find business locations on
 - Route optimizer using OSRM (real road data)
 - Trip planning with drag-to-reorder
 
-## Requirements
+## Setup (Windows)
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+### Step 1: Install Docker Desktop (one-time)
+1. Download from https://www.docker.com/products/docker-desktop/
+2. Run the installer, restart your computer if prompted
+3. Open Docker Desktop and wait for it to fully start (whale icon in system tray turns steady)
 
-## Setup
+### Step 2: Download this project
+1. Click the green **Code** button above → **Download ZIP**
+2. Extract the ZIP to your Desktop (or any folder)
 
-```bash
-git clone https://github.com/YOUR_USERNAME/ClientSeeker.git
-cd ClientSeeker
+### Step 3: Run the app
+1. Open the extracted `ClientSeeker` folder
+2. Click the address bar, type `powershell`, press Enter
+3. Run this command:
+```powershell
 docker-compose up -d --build
 ```
+4. Wait 3-5 minutes (first time only — downloads everything)
 
-First build takes a few minutes (downloads dependencies + headless browser).
+### Step 4: Open the app
+Go to http://localhost:5001 in your browser
 
 ## Usage
-
-Open http://localhost:5001
 
 - **Search tab**: Paste a social media URL, searches Google Maps for the business
 - **Bulk tab**: Paste multiple URLs, processes them sequentially
@@ -39,26 +46,29 @@ Open http://localhost:5001
 
 1. Paste a social media URL (TikTok, Instagram, Facebook)
 2. Extracts the handle/username
-3. Searches Google Maps via headless browser scraper
+3. Searches Google Maps via headless browser
 4. Found → saves as "To Visit" with address, phone, Maps link
 5. Not found → saves as "To Message" (contact via social media)
 
-## Services
+## Stop / Start / Restart
 
-| Service | Port | Description |
-|---------|------|-------------|
-| App | 5001 | Main dashboard |
-| Scraper | 8001 | Google Maps scraper (internal) |
+In PowerShell (from the ClientSeeker folder):
+```powershell
+docker-compose down      # Stop
+docker-compose up -d     # Start
+docker-compose restart   # Restart
+```
+
+Or just use Docker Desktop — click the stop/start buttons on the containers.
 
 ## Data
 
-Your leads are stored in `instance/leads.db` (SQLite). This folder persists between container restarts.
+Your leads are saved in the `instance` folder. This persists even if you stop the containers.
 
-## Stop/Start
+## Troubleshooting
 
-```bash
-docker-compose down    # Stop
-docker-compose up -d   # Start
-```
+**"Docker is not running"** — Open Docker Desktop and wait for it to fully start
 
-Or use Docker Desktop UI.
+**Port 5001 already in use** — Stop other apps using that port, or edit `docker-compose.yml` to change `5001:5001` to another port like `5002:5001`
+
+**First search is slow** — Normal, the scraper browser takes ~10 seconds to start up
