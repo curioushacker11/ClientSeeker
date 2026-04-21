@@ -55,6 +55,7 @@
         .badge-followers { background: rgba(56,189,248,0.15); color: #7dd3fc; font-size: 0.7rem; padding: 2px 8px; margin-left: 6px; }
         .badge-email { background: rgba(34,197,94,0.15); color: #4ade80; font-size: 0.7rem; padding: 2px 8px; margin-left: 6px; }
         .badge-duplicate { background: rgba(239,68,68,0.15); color: #f87171; }
+        .badge-cooking { background: rgba(251,146,60,0.15); color: #fb923c; }
 
         .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .result-field .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -167,6 +168,7 @@
             <div class="tab" data-tab="bulk">Bulk Upload</div>
             <div class="tab" data-tab="leads">Saved Leads</div>
             <div class="tab" data-tab="tovisit">To Visit</div>
+            <div class="tab" data-tab="cooking">Cooking</div>
             <div class="tab" data-tab="add">Add Lead</div>
             <div class="tab" data-tab="route">Route Planner</div>
             <div class="tab" data-tab="trips">Trips</div>
@@ -232,6 +234,7 @@ https://facebook.com/business3
                 <button class="filter-btn" data-status="to_visit">To Visit</button>
                 <button class="filter-btn" data-status="to_message">To Message</button>
                 <button class="filter-btn" data-status="contacted">Contacted</button>
+                <button class="filter-btn" data-status="cooking">Cooking</button>
                 <button class="filter-btn" data-status="client">Client</button>
                 <button class="filter-btn" data-status="skip">Skip</button>
             </div>
@@ -294,6 +297,21 @@ https://facebook.com/business3
             <div id="tovisit-list"></div>
         </div>
 
+        <!-- Cooking Tab -->
+        <div class="tab-content" id="tab-cooking">
+            <div class="info-box" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <span>Leads where deals are cooking. Move here from "To Visit" when a deal starts progressing.</span>
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <select class="status-select" id="cooking-sort" onchange="loadCooking()">
+                        <option value="newest">Newest first</option>
+                        <option value="followers">Most followers</option>
+                    </select>
+                    <span id="cooking-count" style="font-weight:600;"></span>
+                </div>
+            </div>
+            <div id="cooking-list"></div>
+        </div>
+
         <!-- Add Lead Tab -->
         <div class="tab-content" id="tab-add">
             <div class="search-box">
@@ -318,6 +336,7 @@ https://facebook.com/business3
                             <option value="to_message">To Message</option>
                             <option value="new">New</option>
                             <option value="contacted">Contacted</option>
+                            <option value="cooking">Cooking</option>
                             <option value="client">Client</option>
                         </select>
                     </div>
@@ -423,6 +442,7 @@ function switchTab(tabName) {
     localStorage.setItem('activeTab', tabName);
     if (tabName === 'leads') loadLeads();
     if (tabName === 'tovisit') loadToVisit();
+    if (tabName === 'cooking') loadCooking();
     if (tabName === 'route') loadZones();
     if (tabName === 'trips') openTripsTab();
 }
@@ -748,7 +768,7 @@ function renderLeads(leads) {
     container.innerHTML = leads.map(lead => {
         const followersDisplay = lead.followers ? formatFollowers(lead.followers) : null;
         const isExpanded = expandedIds.has(String(lead.id));
-        const statusColors = {new:'#94a3b8',to_visit:'#4ade80',to_message:'#fbbf24',contacted:'#38bdf8',client:'#a78bfa',skip:'#64748b'};
+        const statusColors = {new:'#94a3b8',to_visit:'#4ade80',to_message:'#fbbf24',contacted:'#38bdf8',cooking:'#fb923c',client:'#a78bfa',skip:'#64748b'};
         const statusColor = statusColors[lead.status] || '#94a3b8';
         return `
         <div class="lead-card${isExpanded ? ' expanded' : ''}" id="lead-${lead.id}">
@@ -786,7 +806,7 @@ function renderLeads(leads) {
                     <div class="detail-field">
                         <label>Status</label>
                         <select id="detail-status-${lead.id}">
-                            ${['new','to_visit','to_message','contacted','client','skip'].map(s =>
+                            ${['new','to_visit','to_message','contacted','cooking','client','skip'].map(s =>
                                 `<option value="${s}" ${lead.status===s?'selected':''}>${s.replace('_',' ')}</option>`
                             ).join('')}
                         </select>
@@ -1065,6 +1085,7 @@ function renderToVisitList(leads) {
                 <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
                     ${lead.maps_url ? `<a href="${esc(lead.maps_url)}" target="_blank" class="btn btn-sm btn-ghost" onclick="event.stopPropagation();" style="padding:4px 10px;font-size:0.75rem;">Maps</a>` : ''}
                     ${lead.profile_url ? `<a href="${esc(lead.profile_url)}" target="_blank" class="btn btn-sm btn-ghost" onclick="event.stopPropagation();" style="padding:4px 10px;font-size:0.75rem;">Profile</a>` : ''}
+                    <button class="btn btn-sm" onclick="event.stopPropagation(); moveToCooking(${lead.id}, this)" style="padding:4px 10px;font-size:0.75rem;background:rgba(251,146,60,0.15);border:1px solid #fb923c;color:#fb923c;">\u2192 Cooking</button>
                     <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); removeFromToVisit(${lead.id}, this)" style="padding:4px 10px;font-size:0.75rem;">Remove</button>
                     <span style="color:#475569;font-size:1.2rem;">${isExpanded ? '\u25B2' : '\u25BC'}</span>
                 </div>
@@ -1083,7 +1104,7 @@ function renderToVisitList(leads) {
                     <div class="detail-field">
                         <label>Status</label>
                         <select id="tv-status-${lead.id}">
-                            ${['new','to_visit','to_message','contacted','client','skip'].map(s =>
+                            ${['new','to_visit','to_message','contacted','cooking','client','skip'].map(s =>
                                 `<option value="${s}" ${lead.status===s?'selected':''}>${s.replace('_',' ')}</option>`
                             ).join('')}
                         </select>
@@ -1222,6 +1243,216 @@ async function removeFromToVisit(id, btn) {
     }
 }
 
+async function moveToCooking(id, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+        await fetch(`/api/leads/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({status: 'cooking', priority: 0})
+        });
+        loadToVisit();
+    } catch (err) {
+        btn.textContent = 'error';
+        btn.disabled = false;
+    }
+}
+
+// --- Cooking Tab ---
+
+async function loadCooking() {
+    try {
+        const resp = await fetch('/api/leads?status=cooking');
+        const leads = await resp.json();
+        const sort = document.getElementById('cooking-sort').value;
+        if (sort === 'followers') {
+            leads.sort((a, b) => (b.followers || 0) - (a.followers || 0));
+        }
+        document.getElementById('cooking-count').textContent = leads.length + ' leads';
+        renderCookingList(leads);
+    } catch (err) {
+        document.getElementById('cooking-list').innerHTML = '<div class="no-result">Error loading leads</div>';
+    }
+}
+
+function renderCookingList(leads) {
+    const container = document.getElementById('cooking-list');
+    if (!leads.length) {
+        container.innerHTML = '<div class="empty-state"><p>No leads cooking yet.</p><p style="font-size:0.9rem;">Use the "\u2192 Cooking" button in To Visit to move leads here.</p></div>';
+        return;
+    }
+    const expandedIds = new Set();
+    container.querySelectorAll('.lead-card.expanded').forEach(el => {
+        const m = el.id.match(/cooking-(\d+)/);
+        if (m) expandedIds.add(m[1]);
+    });
+
+    container.innerHTML = leads.map(lead => {
+        const followersDisplay = lead.followers ? formatFollowers(lead.followers) : null;
+        const isExpanded = expandedIds.has(String(lead.id));
+        return `
+        <div class="lead-card${isExpanded ? ' expanded' : ''}" id="cooking-${lead.id}">
+            <div class="lead-header" onclick="toggleCookingDetail(${lead.id})">
+                <div class="lead-info">
+                    <div class="lead-name">
+                        <span>${esc(lead.business_name || lead.handle)}</span>
+                        ${lead.zone ? `<span class="badge badge-zone">${esc(lead.zone)}</span>` : ''}
+                        ${followersDisplay ? `<span class="badge badge-followers">${followersDisplay}</span>` : ''}
+                        ${lead.email ? `<span class="badge badge-email">Email</span>` : ''}
+                    </div>
+                    <div class="lead-meta">
+                        @${esc(lead.handle)} on ${esc(lead.platform)}
+                        ${lead.address ? ` &middot; ${esc(lead.address)}` : ''}
+                        ${lead.phone ? ` &middot; ${esc(lead.phone)}` : ''}
+                    </div>
+                </div>
+                <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
+                    ${lead.maps_url ? `<a href="${esc(lead.maps_url)}" target="_blank" class="btn btn-sm btn-ghost" onclick="event.stopPropagation();" style="padding:4px 10px;font-size:0.75rem;">Maps</a>` : ''}
+                    ${lead.profile_url ? `<a href="${esc(lead.profile_url)}" target="_blank" class="btn btn-sm btn-ghost" onclick="event.stopPropagation();" style="padding:4px 10px;font-size:0.75rem;">Profile</a>` : ''}
+                    <button class="btn btn-sm" onclick="event.stopPropagation(); moveToClient(${lead.id}, this)" style="padding:4px 10px;font-size:0.75rem;background:rgba(167,139,250,0.15);border:1px solid #a78bfa;color:#a78bfa;">\u2192 Client</button>
+                    <span style="color:#475569;font-size:1.2rem;">${isExpanded ? '\u25B2' : '\u25BC'}</span>
+                </div>
+            </div>
+            <div class="lead-detail">
+                <div class="detail-links">
+                    ${lead.profile_url ? `<a href="${esc(lead.profile_url)}" target="_blank">Open Profile</a>` : ''}
+                    ${lead.maps_url ? `<a href="${esc(lead.maps_url)}" target="_blank">Open in Maps</a>` : ''}
+                    ${lead.website ? `<a href="${esc(lead.website)}" target="_blank">Website</a>` : ''}
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-field">
+                        <label>Business Name</label>
+                        <input type="text" id="ck-name-${lead.id}" value="${esc(lead.business_name || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Status</label>
+                        <select id="ck-status-${lead.id}">
+                            ${['new','to_visit','to_message','contacted','cooking','client','skip'].map(s =>
+                                `<option value="${s}" ${lead.status===s?'selected':''}>${s.replace('_',' ')}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="detail-field">
+                        <label>Platform</label>
+                        <select id="ck-platform-${lead.id}">
+                            ${['tiktok','instagram','facebook','other'].map(p =>
+                                `<option value="${p}" ${lead.platform===p?'selected':''}>${p}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="detail-field">
+                        <label>Handle</label>
+                        <input type="text" id="ck-handle-${lead.id}" value="${esc(lead.handle || '')}" />
+                    </div>
+                    <div class="detail-field full">
+                        <label>Profile URL</label>
+                        <input type="text" id="ck-profile-${lead.id}" value="${esc(lead.profile_url || '')}" />
+                    </div>
+                    <div class="detail-field full">
+                        <label>Google Maps Link</label>
+                        <input type="text" id="ck-maps-${lead.id}" value="${esc(lead.maps_url || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Address</label>
+                        <input type="text" id="ck-address-${lead.id}" value="${esc(lead.address || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Phone</label>
+                        <input type="text" id="ck-phone-${lead.id}" value="${esc(lead.phone || '')}" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Email</label>
+                        <input type="text" id="ck-email-${lead.id}" value="${esc(lead.email || '')}" placeholder="Enter email" />
+                    </div>
+                    <div class="detail-field">
+                        <label>Followers</label>
+                        <input type="text" id="ck-followers-${lead.id}" value="${lead.followers ? formatFollowers(lead.followers) : ''}" placeholder="e.g. 89.2K" />
+                    </div>
+                    <div class="detail-field full">
+                        <label>Notes</label>
+                        <textarea id="ck-notes-${lead.id}">${esc(lead.notes || '')}</textarea>
+                    </div>
+                </div>
+                <div class="detail-actions">
+                    <button class="btn btn-save" onclick="saveCookingDetail(${lead.id})">Save Changes</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteFromCooking(${lead.id})" style="margin-left:auto;">Delete</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleCookingDetail(id) {
+    const card = document.getElementById('cooking-' + id);
+    if (card) card.classList.toggle('expanded');
+}
+
+async function saveCookingDetail(id) {
+    const data = {};
+    data.business_name = document.getElementById('ck-name-' + id).value.trim();
+    data.status = document.getElementById('ck-status-' + id).value;
+    data.platform = document.getElementById('ck-platform-' + id).value;
+    data.handle = document.getElementById('ck-handle-' + id).value.trim();
+    data.profile_url = document.getElementById('ck-profile-' + id).value.trim();
+    data.maps_url = document.getElementById('ck-maps-' + id).value.trim();
+    data.address = document.getElementById('ck-address-' + id).value.trim();
+    data.phone = document.getElementById('ck-phone-' + id).value.trim();
+    data.notes = document.getElementById('ck-notes-' + id).value;
+
+    const emailVal = document.getElementById('ck-email-' + id).value.trim();
+    data.email = emailVal;
+    data.email_source = emailVal ? 'manual' : '';
+
+    const followersRaw = document.getElementById('ck-followers-' + id).value.trim();
+    if (followersRaw) {
+        const num = parseFollowerInput(followersRaw);
+        if (num === null) { alert('Invalid follower count'); return; }
+        data.followers = num;
+    } else {
+        data.followers = null;
+    }
+
+    if (!data.maps_url) {
+        data.lat = null;
+        data.lng = null;
+        data.zone = '';
+    }
+
+    try {
+        await fetch(`/api/leads/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        loadCooking();
+    } catch (err) {
+        alert('Error saving: ' + err.message);
+    }
+}
+
+async function deleteFromCooking(id) {
+    if (!confirm('Delete this lead?')) return;
+    await fetch(`/api/leads/${id}`, {method: 'DELETE'});
+    loadCooking();
+}
+
+async function moveToClient(id, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+        await fetch(`/api/leads/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({status: 'client'})
+        });
+        loadCooking();
+    } catch (err) {
+        btn.textContent = 'error';
+        btn.disabled = false;
+    }
+}
+
 // --- Follower Fetch (with progress) ---
 
 let followersRunning = false;
@@ -1329,9 +1560,13 @@ function stopFollowerSearch() {
 async function fixTiktokNames() {
     const btn = document.getElementById('fix-names-btn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>Fixing names + re-searching Maps...';
+    btn.innerHTML = '<span class="spinner"></span>Fixing names...';
     try {
-        const resp = await fetch('/api/fix-tiktok-names', {method: 'POST'});
+        const resp = await fetch('/api/fix-tiktok-names', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({force: true})
+        });
         const data = await resp.json();
         btn.textContent = `Done! ${data.fixed} fixed, ${data.skipped} already done`;
         loadLeads();

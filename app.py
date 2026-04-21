@@ -157,10 +157,26 @@ def _parse_follower_string(s):
 def fetch_tiktok_name(profile_url):
     """Fetch the display name (nickname) from a TikTok profile page."""
     try:
+        handle_match = re.search(r'tiktok\.com/@([^/?#]+)', profile_url, re.IGNORECASE)
+        if not handle_match:
+            return None
+        handle = handle_match.group(1).lower()
+
         resp = requests.get(profile_url, headers=SCRAPE_HEADERS, timeout=10)
-        match = re.search(r'"nickname"\s*:\s*"([^"]+)"', resp.text)
+        text = resp.text
+
+        # Look for the user object with matching uniqueId, then grab its nickname
+        # Pattern: "uniqueId":"handle"... (within ~200 chars) ..."nickname":"Name"
+        pattern = rf'"uniqueId"\s*:\s*"{re.escape(handle)}"[^{{}}]{{0,200}}"nickname"\s*:\s*"([^"]+)"'
+        match = re.search(pattern, text, re.IGNORECASE)
         if match:
             return match.group(1)
+
+        # Fallback: try reversed order (nickname before uniqueId)
+        pattern2 = rf'"nickname"\s*:\s*"([^"]+)"[^{{}}]{{0,200}}"uniqueId"\s*:\s*"{re.escape(handle)}"'
+        match2 = re.search(pattern2, text, re.IGNORECASE)
+        if match2:
+            return match2.group(1)
     except Exception:
         pass
     return None
@@ -728,6 +744,9 @@ def followers_queue():
 @app.route("/api/fix-tiktok-names", methods=["POST"])
 def fix_tiktok_names():
     """Fetch real display names from TikTok and re-search Maps for all TikTok leads."""
+    data = request.get_json(silent=True) or {}
+    force = data.get("force", False)
+
     db = get_db()
     rows = db.execute(
         "SELECT id, handle, profile_url, business_name FROM leads "
@@ -740,7 +759,7 @@ def fix_tiktok_names():
     for row in rows:
         bname = (row["business_name"] or "").strip()
         handle = (row["handle"] or "").strip()
-        if bname and bname.lower() != handle.lower():
+        if not force and bname and bname.lower() != handle.lower():
             skipped += 1
             continue
         name = fetch_tiktok_name(row["profile_url"])

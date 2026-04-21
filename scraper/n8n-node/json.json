@@ -1,0 +1,113 @@
+{
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ecc6d591-1db2-40ff-938b-82bbefbeeaa3",
+      "name": "When clicking ‘Test workflow’"
+    },
+    {
+      "parameters": {
+        "url": "=http://gmaps_scraper_api_service:8001/scrape-get?query={{ $json.search }}&max_places={{ $json.max_results }}&lang={{ $json.language }}&headless={{ $json.headless }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        0
+      ],
+      "id": "f7e8be7d-e62f-46bc-baec-17744e1da9de",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "return(\n[\n  {\n    \"search\": \"Hotels in 98392\",\n    \"max_results\": 10,\n    \"language\": \"en\",\n    \"headless\": true\n  },\n  {\n    \"search\": \"Hotels in 90210\",\n    \"max_results\": 10,\n    \"language\": \"en\",\n    \"headless\": true\n  },\n  {\n    \"search\": \"Hotels in Manhattan\",\n    \"max_results\": 10,\n    \"language\": \"en\",\n    \"headless\": true\n  }\n]\n\n)"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "9ffd5d48-fd3c-4038-a6c7-8a99cdb657cd",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE MapsResults (\n    id SERIAL PRIMARY KEY,\n    name VARCHAR(255),\n    place_id VARCHAR(100),\n    latitude DECIMAL(10, 8),\n    longitude DECIMAL(11, 8),\n    address TEXT,\n    rating DECIMAL(2, 1),\n    reviews_count INTEGER,\n    categories TEXT[],\n    website VARCHAR(255),\n    phone VARCHAR(20),\n    google_maps_link TEXT,\n    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,\n    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        420,
+        200
+      ],
+      "id": "a9409508-223f-43b7-9dcc-e4c164958c36",
+      "name": "make results table",
+      "credentials": {
+        "postgres": {
+          "id": "fmXeWKYup1NCkLhG",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE search_configurations (\n    id SERIAL PRIMARY KEY,\n    search_term TEXT NOT NULL,\n    max_results INTEGER DEFAULT 20,\n    language_code VARCHAR(5),\n    is_headless BOOLEAN DEFAULT TRUE\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        200
+      ],
+      "id": "df4fc0b4-294a-4236-b487-b5feb8d13577",
+      "name": "make search table",
+      "credentials": {
+        "postgres": {
+          "id": "fmXeWKYup1NCkLhG",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When clicking ‘Test workflow’": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "00598440402f72ebc49665cfec6f4d3c5e4cf3d5b62909aca0eba40013b8bd4e"
+  }
+}
